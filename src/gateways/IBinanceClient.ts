@@ -10,6 +10,12 @@ export interface OrderRequest {
   newClientOrderId: string;
 }
 
+export interface SymbolRiskConfig {
+  symbol: string;
+  marginType: 'ISOLATED' | 'CROSSED';
+  leverage: number;
+}
+
 export interface OrderResponse {
   clientOrderId: string;
   orderId: number;
@@ -30,4 +36,7 @@ export interface IBinanceClient {
   getAllOrders(symbol: string, limit?: number): Promise<OrderResponse[]>;
   getPositionMode(): Promise<'ONE_WAY' | 'HEDGE'>;
   getPositionAmount(symbol: string): Promise<number>;
+  getSymbolRiskConfig(symbol: string): Promise<SymbolRiskConfig>;
+  setMarginType(symbol: string, marginType: 'ISOLATED' | 'CROSSED'): Promise<void>;
+  setLeverage(symbol: string, leverage: number): Promise<void>;
 }
