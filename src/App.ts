@@ -21,6 +21,7 @@ import { QuantEngine, QuantModel } from './strategy/QuantEngine';
 import { assertExchangeEnvironmentSafe } from './config/exchangeSafety';
 import { syncStartupRiskState } from './engine/StartupRiskSync';
 import { ensureStartupSymbolRiskConfig } from './engine/StartupSymbolConfig';
+import { extractOneWayPositionAmount } from './engine/UserPositionSync';
 
 export class App {
   private journal: IntentJournal;
@@ -50,6 +51,7 @@ export class App {
   private aggTradeCount = 0;
   private openInterestTracker = new OpenInterestTracker();
   private currentOiDelta: OiDelta = 'UNAVAILABLE_DUE_TO_DATA';
+  private userRiskSynchronized = false;
   private quantEngine = new QuantEngine({
     feeRate: 0.0004,
     syntheticSlippage: 0.0001,
@@ -89,7 +91,9 @@ export class App {
       config.BINANCE_API_KEY
     );
     this.executionEngine = new ExecutionEngine(this.restClient, this.journal);
-    this.orderTracker = new OrderTracker(this.journal, this.riskGuard);
+    // Live position risk is synchronized from absolute Binance account state.
+    // OrderTracker still journals fills, but does not increment position itself.
+    this.orderTracker = new OrderTracker(this.journal, this.riskGuard, false);
     this.reconciler = new Reconciler(this.restClient, this.journal, config.SYMBOL);
     
     // Very simple grid config
@@ -222,6 +226,41 @@ export class App {
       }
     });
 
+    this.userGateway.on('connected', () => {
+      this.userRiskSynchronized = false;
+      void this.refreshAbsolutePosition('user-stream-connected');
+    });
+
+    this.userGateway.on('disconnected', () => {
+      this.userRiskSynchronized = false;
+      void this.cancelRestingGridOrders('user-stream-disconnected');
+    });
+
+    this.userGateway.on('account_update', (payload) => {
+      this.watchdog.pingUser();
+
+      try {
+        const positionAmount = extractOneWayPositionAmount(
+          payload,
+          config.SYMBOL
+        );
+
+        if (positionAmount !== null) {
+          this.riskGuard.syncPosition(positionAmount);
+          this.userRiskSynchronized = true;
+
+          logger.debug({
+            symbol: config.SYMBOL,
+            positionAmount
+          }, 'Risk position synchronized from ACCOUNT_UPDATE');
+        }
+      } catch (err) {
+        this.userRiskSynchronized = false;
+        logger.error({ err }, 'Invalid ACCOUNT_UPDATE position state');
+        void this.cancelRestingGridOrders('invalid-account-update');
+      }
+    });
+
     this.userGateway.on('order_trade_update', (payload) => {
       this.watchdog.pingUser();
       this.orderTracker.handleTradeUpdate(payload);
@@ -292,13 +331,62 @@ export class App {
 
     // Start loops
     this.reconciliationInterval = setInterval(() => {
-      this.reconciler.reconcile();
-      if (this.reconciler.isHalted) {
-         this.shutdown('Halted by reconciler');
-      }
+      void this.runReconciliationCycle();
     }, 60000); // Every 1 min
 
     this.strategyInterval = setInterval(() => this.runStrategyCycle(), 5000); // Every 5 sec
+  }
+
+  private async cancelRestingGridOrders(reason: string): Promise<void> {
+    const openIntents = this.journal.getOpenIntents();
+    let cancelRequests = 0;
+
+    for (const open of openIntents) {
+      if (
+        open.state === LifecycleState.ACKNOWLEDGED ||
+        open.state === LifecycleState.PARTIALLY_FILLED
+      ) {
+        await this.executionEngine.cancelOrder(open);
+        cancelRequests++;
+      }
+    }
+
+    logger.warn({
+      reason,
+      openIntents: openIntents.length,
+      cancelRequests
+    }, 'Resting grid orders canceled/queued for cancellation');
+  }
+
+  private async refreshAbsolutePosition(reason: string): Promise<void> {
+    try {
+      const positionAmount =
+        await this.restClient.getPositionAmount(config.SYMBOL);
+
+      this.riskGuard.syncPosition(positionAmount);
+      this.userRiskSynchronized = true;
+
+      logger.info({
+        reason,
+        symbol: config.SYMBOL,
+        positionAmount
+      }, 'Absolute exchange position synchronized');
+    } catch (err) {
+      this.userRiskSynchronized = false;
+      logger.error({ err, reason }, 'Absolute position synchronization failed');
+      await this.cancelRestingGridOrders('position-sync-failed');
+    }
+  }
+
+  private async runReconciliationCycle(): Promise<void> {
+    await this.reconciler.reconcile();
+
+    if (this.reconciler.isHalted) {
+      this.shutdown('Halted by reconciler');
+      return;
+    }
+
+    await this.refreshAbsolutePosition('reconciliation');
   }
 
   private async refreshOpenInterest(): Promise<void> {
@@ -343,6 +431,14 @@ export class App {
 
   private async runStrategyCycle() {
     if (this.reconciler.isHalted) return;
+
+    if (!this.userGateway.isConnected() || !this.userRiskSynchronized) {
+      logger.debug({
+        userStreamConnected: this.userGateway.isConnected(),
+        userRiskSynchronized: this.userRiskSynchronized
+      }, 'Strategy paused until user stream and absolute position state are ready');
+      return;
+    }
 
     const currentPrice = this.marketGateway.getCurrentPrice();
     if (currentPrice === 0) return; // Wait for market data
