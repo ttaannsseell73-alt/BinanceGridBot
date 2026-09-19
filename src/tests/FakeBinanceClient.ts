@@ -1,4 +1,4 @@
-import { IBinanceClient, OrderRequest, OrderResponse, SymbolRiskConfig } from '../gateways/IBinanceClient';
+import { IBinanceClient, OrderRequest, OrderResponse, PositionRiskSnapshot, SymbolRiskConfig } from '../gateways/IBinanceClient';
 import { FakeBinanceExchange, FakeOrder } from '../tests/FakeBinanceExchange';
 
 export class FakeBinanceClient implements IBinanceClient {
@@ -26,6 +26,14 @@ export class FakeBinanceClient implements IBinanceClient {
   async cancelOrder(symbol: string, origClientOrderId: string): Promise<OrderResponse> {
     const order = this.exchange.cancelOrder(origClientOrderId);
     return this.mapOrder(order);
+  }
+
+  async cancelAllOpenOrders(symbol: string): Promise<void> {
+    this.exchange.cancelAllOpenOrders(symbol);
+  }
+
+  async closePositionMarket(symbol: string, positionAmount: number): Promise<void> {
+    this.exchange.closePositionMarket(positionAmount);
   }
 
   async getOrder(symbol: string, origClientOrderId: string): Promise<OrderResponse | null> {
@@ -56,6 +64,18 @@ export class FakeBinanceClient implements IBinanceClient {
     if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
     if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
     return this.exchange.positionAmount;
+  }
+
+  async getPositionRisk(symbol: string): Promise<PositionRiskSnapshot> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+    return {
+      symbol,
+      positionAmt: this.exchange.positionAmount,
+      entryPrice: this.exchange.entryPrice,
+      markPrice: this.exchange.markPrice,
+      liquidationPrice: this.exchange.liquidationPrice
+    };
   }
 
   async getSymbolRiskConfig(symbol: string): Promise<SymbolRiskConfig> {
