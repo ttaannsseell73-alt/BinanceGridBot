@@ -24,6 +24,7 @@ import { ensureStartupSymbolRiskConfig } from './engine/StartupSymbolConfig';
 import { EmergencyReason, EmergencyRiskEngine } from './engine/EmergencyRiskEngine';
 import { executeEmergencyExit } from './engine/EmergencyExitEngine';
 import { assertQuantExecutionModeSafe, resolveQuantExecution } from './strategy/QuantExecutionPolicy';
+import { LiveQuantObserver, LiveQuantObservationEvent } from './simulation/LiveQuantObserver';
 
 export class App {
   private journal: IntentJournal;
@@ -67,11 +68,17 @@ export class App {
   });
   private quantModelLoaded = false;
   private readonly quantExecutionMode = config.QUANT_EXECUTION_MODE;
-  private readonly quantModelPath = path.join(
+  private readonly quantBaseModelPath = path.join(
     process.cwd(),
     'artifacts',
     `quant_model_${config.SYMBOL}.json`
   );
+  private readonly quantRuntimeModelPath = path.join(
+    process.cwd(),
+    'data',
+    `quant_model_${config.SYMBOL}.live.json`
+  );
+  private liveQuantObserver: LiveQuantObserver;
   constructor() {
     assertExchangeEnvironmentSafe({
       restUrl: config.BINANCE_FUTURES_URL,
@@ -123,32 +130,93 @@ export class App {
     
     this.watchdog = new Watchdog();
     this.loadQuantModel();
+    this.liveQuantObserver = new LiveQuantObserver(
+      {
+        gridLevels: 3,
+        gridSpacing: this.gridSpacing,
+        baseOrderQty: 0.01,
+        horizonCandles: 60,
+        strideCandles: 15,
+        makerFeeRate: 0.0002,
+        syntheticSlippageRate: 0.0001
+      },
+      this.quantEngine,
+      (event) => this.onLiveQuantObservation(event)
+    );
     this.setupEvents();
   }
 
   private loadQuantModel(): void {
-    if (!fs.existsSync(this.quantModelPath)) {
-      logger.warn({
-        modelPath: this.quantModelPath,
-        quantExecutionMode: this.quantExecutionMode
-      }, 'Quant model not found; real Quant execution will fail closed');
-      return;
+    const candidates = [
+      this.quantRuntimeModelPath,
+      this.quantBaseModelPath
+    ];
+
+    for (const modelPath of candidates) {
+      if (!fs.existsSync(modelPath)) continue;
+
+      try {
+        const raw = fs.readFileSync(modelPath, 'utf8');
+        const model = JSON.parse(raw) as QuantModel;
+        const observations = this.quantEngine.importModel(model);
+        this.quantModelLoaded = observations > 0;
+
+        logger.info({
+          modelPath,
+          observations,
+          quantExecutionMode: this.quantExecutionMode,
+          runtimeModel: modelPath === this.quantRuntimeModelPath
+        }, 'Quant model loaded');
+        return;
+      } catch (err) {
+        logger.error({ err, modelPath }, 'Failed to load Quant model candidate');
+      }
     }
 
-    try {
-      const raw = fs.readFileSync(this.quantModelPath, 'utf8');
-      const model = JSON.parse(raw) as QuantModel;
-      const observations = this.quantEngine.importModel(model);
-      this.quantModelLoaded = observations > 0;
+    this.quantModelLoaded = false;
+    logger.warn({
+      baseModelPath: this.quantBaseModelPath,
+      runtimeModelPath: this.quantRuntimeModelPath,
+      quantExecutionMode: this.quantExecutionMode
+    }, 'No usable Quant model found; real Quant execution will fail closed');
+  }
 
+  private persistRuntimeQuantModel(): void {
+    const dir = path.dirname(this.quantRuntimeModelPath);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const tmpPath = `${this.quantRuntimeModelPath}.tmp`;
+    fs.writeFileSync(
+      tmpPath,
+      JSON.stringify(this.quantEngine.exportModel()),
+      'utf8'
+    );
+    fs.renameSync(tmpPath, this.quantRuntimeModelPath);
+    this.quantModelLoaded = this.quantEngine.getObservationCount() > 0;
+  }
+
+  private onLiveQuantObservation(event: LiveQuantObservationEvent): void {
+    if (this.quantExecutionMode !== 'SHADOW') return;
+
+    try {
+      this.persistRuntimeQuantModel();
       logger.info({
-        modelPath: this.quantModelPath,
-        observations,
-        quantExecutionMode: this.quantExecutionMode
-      }, 'Quant model loaded');
+        symbol: config.SYMBOL,
+        anchorTimestamp: event.anchorTimestamp,
+        completedTimestamp: event.completedTimestamp,
+        netReturn: event.outcome.netReturn,
+        filledOrders: event.outcome.filledOrders,
+        terminalPosition: event.outcome.terminalPosition,
+        totalLiveRecorded: event.totalRecorded,
+        pendingEpisodes: event.pendingEpisodes,
+        totalModelObservations: this.quantEngine.getObservationCount(),
+        runtimeModelPath: this.quantRuntimeModelPath
+      }, 'Live Quant observation recorded');
     } catch (err) {
-      this.quantModelLoaded = false;
-      logger.error({ err, modelPath: this.quantModelPath }, 'Failed to load Quant model');
+      logger.error({
+        err,
+        runtimeModelPath: this.quantRuntimeModelPath
+      }, 'Failed to persist live Quant observation');
     }
   }
 
@@ -217,6 +285,14 @@ export class App {
         liquiditySweepUp: this.activePA.liquiditySweepUp,
         liquiditySweepDown: this.activePA.liquiditySweepDown
       }, 'Live price action updated');
+
+      if (this.quantExecutionMode === 'SHADOW') {
+        this.liveQuantObserver.processClosedCandle(
+          candle,
+          this.activePA,
+          this.activeMS
+        );
+      }
     });
 
     this.marketGateway.on('agg_trade', (tick: Tick) => {
@@ -640,6 +716,7 @@ export class App {
       mode: this.quantExecutionMode,
       realQuantScore,
       activePriceAction: this.activePA,
+      activeMicrostructure: this.activeMS,
       smokeScore
     });
 
