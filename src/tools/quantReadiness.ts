@@ -1,8 +1,7 @@
-import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
 import { analyzeQuantReadiness } from '../simulation/QuantReadiness';
-import { QuantModel } from '../strategy/QuantEngine';
+import { QuantModelStore } from '../simulation/QuantModelStore';
 
 const runtimePath = path.join(
   process.cwd(),
@@ -15,21 +14,23 @@ const basePath = path.join(
   `quant_model_${config.SYMBOL}.json`
 );
 
-const modelPath = fs.existsSync(runtimePath) ? runtimePath : basePath;
+const store = new QuantModelStore(runtimePath, basePath);
+const candidate = store.loadCandidates()[0];
 
-if (!fs.existsSync(modelPath)) {
-  throw new Error(`Quant model not found: ${modelPath}`);
+if (!candidate) {
+  throw new Error(
+    `No readable Quant model found at runtime/backup/base paths`
+  );
 }
 
-const model = JSON.parse(fs.readFileSync(modelPath, 'utf8')) as QuantModel;
-
-const report = analyzeQuantReadiness(model, {
+const report = analyzeQuantReadiness(candidate.model, {
   minSamples: 10,
   minExpectancy: 0.001,
   rawRoundTripPenalty: (0.0004 * 2) + (0.0001 * 2)
 });
 
-console.log('QUANT_READINESS_MODEL', modelPath);
+console.log('QUANT_READINESS_MODEL', candidate.modelPath);
+console.log('QUANT_READINESS_SOURCE', candidate.source);
 console.log('TOTAL_OBSERVATIONS', report.totalObservations);
 console.log('LIVE_EXACT_OBSERVATIONS', report.liveExactObservations);
 console.log('LIVE_EXACT_STATES', report.liveExactStates);
