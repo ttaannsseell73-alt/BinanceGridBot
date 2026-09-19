@@ -23,6 +23,7 @@ import { syncStartupRiskState } from './engine/StartupRiskSync';
 import { ensureStartupSymbolRiskConfig } from './engine/StartupSymbolConfig';
 import { EmergencyReason, EmergencyRiskEngine } from './engine/EmergencyRiskEngine';
 import { executeEmergencyExit } from './engine/EmergencyExitEngine';
+import { assertQuantExecutionModeSafe, resolveQuantExecution } from './strategy/QuantExecutionPolicy';
 
 export class App {
   private journal: IntentJournal;
@@ -65,8 +66,7 @@ export class App {
     minSamples: 10
   });
   private quantModelLoaded = false;
-  private readonly quantLiveEnabled =
-    String(process.env.QUANT_LIVE_ENABLED ?? 'false').toLowerCase() === 'true';
+  private readonly quantExecutionMode = config.QUANT_EXECUTION_MODE;
   private readonly quantModelPath = path.join(
     process.cwd(),
     'artifacts',
@@ -77,6 +77,13 @@ export class App {
       restUrl: config.BINANCE_FUTURES_URL,
       wsUrl: config.BINANCE_FUTURES_WS_URL,
       liveAcknowledgement: process.env.I_UNDERSTAND_LIVE
+    });
+
+    assertQuantExecutionModeSafe({
+      mode: this.quantExecutionMode,
+      restUrl: config.BINANCE_FUTURES_URL,
+      wsUrl: config.BINANCE_FUTURES_WS_URL,
+      liveQuantAcknowledgement: config.I_UNDERSTAND_QUANT_LIVE
     });
 
     this.journal = new IntentJournal(config.DB_PATH);
@@ -123,8 +130,8 @@ export class App {
     if (!fs.existsSync(this.quantModelPath)) {
       logger.warn({
         modelPath: this.quantModelPath,
-        quantLiveEnabled: this.quantLiveEnabled
-      }, 'Quant model not found; real Quant remains in shadow/unavailable mode');
+        quantExecutionMode: this.quantExecutionMode
+      }, 'Quant model not found; real Quant execution will fail closed');
       return;
     }
 
@@ -137,7 +144,7 @@ export class App {
       logger.info({
         modelPath: this.quantModelPath,
         observations,
-        quantLiveEnabled: this.quantLiveEnabled
+        quantExecutionMode: this.quantExecutionMode
       }, 'Quant model loaded');
     } catch (err) {
       this.quantModelLoaded = false;
@@ -579,6 +586,24 @@ export class App {
       this.gridAnchorPrice = currentPrice;
     }
 
+    if (this.quantExecutionMode === 'SHADOW' && openIntents.length > 0) {
+      for (const open of openIntents) {
+        if (
+          open.state === LifecycleState.ACKNOWLEDGED ||
+          open.state === LifecycleState.PARTIALLY_FILLED
+        ) {
+          const cancelOk = await this.executionEngine.cancelOrder(open);
+          await this.recordCriticalOperation(cancelOk, 'shadow-cancel-order');
+          if (this.emergencyExitInProgress) return;
+        }
+      }
+
+      logger.info({
+        openIntents: openIntents.length
+      }, 'SHADOW mode: canceled resting grid orders and blocked new exposure');
+      return;
+    }
+
     // Keep the current grid episode stable.
     // Inventory changes from fills must not re-price every resting order.
     // Recenter logic above remains the only path that replaces an active grid.
@@ -589,7 +614,7 @@ export class App {
         priceMove,
         currentPosition,
         openIntents: openIntents.length,
-        quantMode: this.quantLiveEnabled ? 'REAL_ENABLED' : 'SHADOW',
+        quantMode: this.quantExecutionMode,
         realQuantScore
       }, 'Grid episode active; keeping resting orders');
 
@@ -611,27 +636,28 @@ export class App {
       modelSource: 'NONE'
     };
 
-    /*
-     * Safe rollout:
-     * - Default: real Quant is evaluated/logged in SHADOW, existing TESTNET
-     *   smoke score remains the execution gate.
-     * - QUANT_LIVE_ENABLED=true: no fallback to smoke is allowed. Missing
-     *   model/features fail closed and place no new grid.
-     */
-    if (this.quantLiveEnabled && realQuantScore === null) {
-      logger.warn({
+    const quantDecision = resolveQuantExecution({
+      mode: this.quantExecutionMode,
+      realQuantScore,
+      activePriceAction: this.activePA,
+      smokeScore
+    });
+
+    if (!quantDecision.canExecute || quantDecision.score === null) {
+      logger.info({
+        currentPrice,
+        anchorPrice,
+        currentPosition,
+        quantMode: this.quantExecutionMode,
+        quantDecision: quantDecision.reason,
         quantModelLoaded: this.quantModelLoaded,
-        hasPriceAction: this.activePA !== null,
-        hasMicrostructure: this.activeMS !== null
-      }, 'Real Quant enabled but inputs/model are unavailable; skipping grid');
+        realQuantScore
+      }, 'Quant execution deferred; no new grid exposure');
       return;
     }
 
-    const executionScore =
-      this.quantLiveEnabled ? realQuantScore! : smokeScore;
-
-    const executionPA =
-      this.quantLiveEnabled ? this.activePA : null;
+    const executionScore = quantDecision.score;
+    const executionPA = quantDecision.priceAction;
 
     const desiredIntents = this.strategyEngine.generateGrid(
       anchorPrice,
@@ -647,7 +673,8 @@ export class App {
       currentPosition,
       desiredIntents: desiredIntents.length,
       openIntents: openIntents.length,
-      quantMode: this.quantLiveEnabled ? 'REAL_ENABLED' : 'SHADOW',
+      quantMode: this.quantExecutionMode,
+      quantDecision: quantDecision.reason,
       quantModelLoaded: this.quantModelLoaded,
       realQuantScore,
       executionScore
@@ -687,6 +714,7 @@ export class App {
     if (this.strategyInterval) clearInterval(this.strategyInterval);
     if (this.reconciliationInterval) clearInterval(this.reconciliationInterval);
     if (this.openInterestInterval) clearInterval(this.openInterestInterval);
+    if (this.positionRiskInterval) clearInterval(this.positionRiskInterval);
     
     this.watchdog.stop();
     this.marketGateway.disconnect();
