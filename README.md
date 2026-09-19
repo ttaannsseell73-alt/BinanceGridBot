@@ -18,12 +18,16 @@ This project implements the canonical architecture specification v2.1. It is des
 
 - **Scope:** Grid bot only. Scalp code is intentionally kept out of this repository.
 - **Environment:** Binance Futures **TESTNET**. Mainnet is not enabled by this checkpoint.
-- **Quant:** V2 fixed-horizon model remains **SHADOW** by default. Real execution requires an `EXACT` live-feature match (PA + microstructure + OI); historical PA-only fallback is diagnostic only. `SMOKE_TESTNET` remains explicit connectivity-only mode and `REAL_LIVE` is double-acknowledgement gated.
+- **Quant:** V2 fixed-horizon model remains **SHADOW** by default. SHADOW passively records mature live PA + microstructure + OI states, labels them after the same fixed horizon used by training, and persists them to `data/quant_model_<SYMBOL>.live.json`. Real execution requires an `EXACT` live-feature match; historical PA-only fallback is diagnostic only.
 - **Price Action warm-start:** 1000 closed 1m candles are loaded before live scoring so market structure is mature at startup.
 - **Execution:** Grid episodes remain stable between recenter events; inventory fills do not continuously re-price resting orders.
 - **Reconciliation:** Uses bounded exchange history to avoid per-intent REST bursts.
 - **Open Interest:** Live OI delta is tracked while duplicate snapshots are ignored.
 - **Emergency risk:** 3% adverse-move, 5% liquidation-distance, and 10-consecutive-critical-error kill switches cancel resting orders, flatten inventory, verify flat, and persist a halt across restart.
+
+## Quant Promotion Gate
+
+Run `npm run quant:readiness` to audit the persisted live model. Promotion is not automatic: a non-breakout exact feature state needs at least 10 observations and net expectancy of at least 0.001 before it is even considered a candidate. Until then, SHADOW remains fail-closed and places no new grid exposure.
 
 ## Getting Started
 
