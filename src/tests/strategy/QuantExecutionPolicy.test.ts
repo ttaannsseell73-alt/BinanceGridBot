@@ -3,7 +3,7 @@ import {
   assertQuantExecutionModeSafe,
   resolveQuantExecution
 } from '../../strategy/QuantExecutionPolicy';
-import { PriceActionFeatures, QuantScore } from '../../models/strategy';
+import { MicrostructureFeatures, PriceActionFeatures, QuantScore } from '../../models/strategy';
 
 const testnetRest = 'https://testnet.binancefuture.com';
 const testnetWs = 'wss://stream.binancefuture.com';
@@ -43,6 +43,13 @@ const pa: PriceActionFeatures = {
   breakoutDown: false,
   liquiditySweepUp: false,
   liquiditySweepDown: false
+};
+
+const ms: MicrostructureFeatures = {
+  cvd: 1,
+  takerImbalance: 1.2,
+  oiDelta: 0.0001,
+  absorption: false
 };
 
 describe('QuantExecutionPolicy', () => {
@@ -88,6 +95,7 @@ describe('QuantExecutionPolicy', () => {
       mode: 'SHADOW',
       realQuantScore: realScore,
       activePriceAction: pa,
+      activeMicrostructure: ms,
       smokeScore
     });
 
@@ -101,6 +109,7 @@ describe('QuantExecutionPolicy', () => {
       mode: 'REAL_TESTNET',
       realQuantScore: noMatch,
       activePriceAction: pa,
+      activeMicrostructure: ms,
       smokeScore
     });
 
@@ -111,9 +120,26 @@ describe('QuantExecutionPolicy', () => {
       mode: 'REAL_TESTNET',
       realQuantScore: { ...realScore, modelSource: 'NONE' },
       activePriceAction: pa,
+      activeMicrostructure: ms,
       smokeScore
     });
     expect(none.canExecute).toBe(false);
+  });
+
+  it('real mode fails closed when any live microstructure field is unavailable', () => {
+    const decision = resolveQuantExecution({
+      mode: 'REAL_TESTNET',
+      realQuantScore: realScore,
+      activePriceAction: pa,
+      activeMicrostructure: {
+        ...ms,
+        oiDelta: 'UNAVAILABLE_DUE_TO_DATA'
+      },
+      smokeScore
+    });
+
+    expect(decision.canExecute).toBe(false);
+    expect(decision.reason).toBe('REAL_QUANT_UNAVAILABLE');
   });
 
   it('real mode passes only an exact live-feature score when ready', () => {
@@ -121,6 +147,7 @@ describe('QuantExecutionPolicy', () => {
       mode: 'REAL_TESTNET',
       realQuantScore: realScore,
       activePriceAction: pa,
+      activeMicrostructure: ms,
       smokeScore
     });
 
