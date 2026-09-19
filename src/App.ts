@@ -372,6 +372,30 @@ export class App {
 
     const priceMove = Math.abs(currentPrice - this.gridAnchorPrice);
 
+    const breakoutActive = Boolean(
+      this.activePA?.breakoutUp || this.activePA?.breakoutDown
+    );
+
+    if (breakoutActive) {
+      for (const open of openIntents) {
+        if (
+          open.state === LifecycleState.ACKNOWLEDGED ||
+          open.state === LifecycleState.PARTIALLY_FILLED
+        ) {
+          await this.executionEngine.cancelOrder(open);
+        }
+      }
+
+      logger.warn({
+        currentPrice,
+        breakoutUp: this.activePA?.breakoutUp ?? false,
+        breakoutDown: this.activePA?.breakoutDown ?? false,
+        openIntents: openIntents.length
+      }, 'Price-action breakout active; no new grid exposure');
+
+      return;
+    }
+
     if (openIntents.length > 0 && priceMove >= this.gridRecenterThreshold) {
       this.pendingGridAnchorPrice = currentPrice;
 
