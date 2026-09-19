@@ -1,4 +1,4 @@
-import { IBinanceClient, OrderRequest, OrderResponse, SymbolRiskConfig } from './IBinanceClient';
+import { IBinanceClient, OrderRequest, OrderResponse, PositionRiskSnapshot, SymbolRiskConfig } from './IBinanceClient';
 import axios from 'axios';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
@@ -227,6 +227,10 @@ export class BinanceRestClient implements IBinanceClient {
   }
 
   async getPositionAmount(symbol: string): Promise<number> {
+    return (await this.getPositionRisk(symbol)).positionAmt;
+  }
+
+  async getPositionRisk(symbol: string): Promise<PositionRiskSnapshot> {
     const data: any = await this.request(
       'GET',
       '/fapi/v3/positionRisk',
@@ -237,28 +241,50 @@ export class BinanceRestClient implements IBinanceClient {
     const relevant = rows.filter(row => row?.symbol === symbol);
 
     if (relevant.length === 0) {
-      return 0;
+      return {
+        symbol,
+        positionAmt: 0,
+        entryPrice: 0,
+        markPrice: 0,
+        liquidationPrice: 0
+      };
     }
 
-    let netPosition = 0;
-
-    for (const row of relevant) {
-      const positionSide = String(row?.positionSide ?? 'BOTH').toUpperCase();
-      if (positionSide !== 'BOTH') {
-        throw new Error(
-          `Unsupported hedge-mode position row for ${symbol}: ${positionSide}`
-        );
-      }
-
-      const amount = Number(row?.positionAmt);
-      if (!Number.isFinite(amount)) {
-        throw new Error(`Invalid position amount for ${symbol}`);
-      }
-
-      netPosition += amount;
+    if (relevant.length !== 1) {
+      throw new Error(
+        `Unexpected position row count for ${symbol}: ${relevant.length}`
+      );
     }
 
-    return Number(netPosition.toFixed(8));
+    const row = relevant[0];
+    const positionSide = String(row?.positionSide ?? 'BOTH').toUpperCase();
+    if (positionSide !== 'BOTH') {
+      throw new Error(
+        `Unsupported hedge-mode position row for ${symbol}: ${positionSide}`
+      );
+    }
+
+    const snapshot: PositionRiskSnapshot = {
+      symbol,
+      positionAmt: Number(row?.positionAmt),
+      entryPrice: Number(row?.entryPrice),
+      markPrice: Number(row?.markPrice),
+      liquidationPrice: Number(row?.liquidationPrice)
+    };
+
+    if (
+      !Number.isFinite(snapshot.positionAmt) ||
+      !Number.isFinite(snapshot.entryPrice) ||
+      !Number.isFinite(snapshot.markPrice) ||
+      !Number.isFinite(snapshot.liquidationPrice)
+    ) {
+      throw new Error(`Invalid position risk snapshot for ${symbol}`);
+    }
+
+    return {
+      ...snapshot,
+      positionAmt: Number(snapshot.positionAmt.toFixed(8))
+    };
   }
 
   async getSymbolRiskConfig(symbol: string): Promise<SymbolRiskConfig> {
@@ -358,6 +384,41 @@ export class BinanceRestClient implements IBinanceClient {
       executedQty: parseFloat(data.executedQty),
       updateTime: data.updateTime,
     };
+  }
+
+  async cancelAllOpenOrders(symbol: string): Promise<void> {
+    await this.request('DELETE', '/fapi/v1/allOpenOrders', { symbol });
+  }
+
+  async closePositionMarket(symbol: string, positionAmount: number): Promise<void> {
+    if (!Number.isFinite(positionAmount)) {
+      throw new Error(`Invalid position amount for emergency close: ${positionAmount}`);
+    }
+
+    if (Math.abs(positionAmount) < 1e-12) {
+      return;
+    }
+
+    const rules = await this.getSymbolRules(symbol);
+    const rawQtyUnits = Math.abs(positionAmount) / rules.stepSize;
+    const qtyUnits = Math.floor(rawQtyUnits + 1e-10);
+    const normalizedQty = qtyUnits * rules.stepSize;
+
+    if (normalizedQty <= 0) {
+      throw new Error(`Emergency close quantity normalized to zero for ${symbol}`);
+    }
+
+    const quantity = normalizedQty.toFixed(rules.qtyDecimals);
+    const side = positionAmount > 0 ? 'SELL' : 'BUY';
+
+    await this.request('POST', '/fapi/v1/order', {
+      symbol,
+      side,
+      type: 'MARKET',
+      quantity,
+      reduceOnly: 'true',
+      newClientOrderId: `emergency-${Date.now()}`
+    });
   }
 
   async getOrder(symbol: string, origClientOrderId: string): Promise<OrderResponse | null> {
