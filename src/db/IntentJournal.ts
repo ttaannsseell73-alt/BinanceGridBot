@@ -55,6 +55,14 @@ export class IntentJournal {
       );
     `);
 
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS system_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+    `);
+
     logger.info('IntentJournal initialized');
   }
 
@@ -161,6 +169,27 @@ export class IntentJournal {
     return processTx();
   }
 
+  public setSystemState(key: string, value: string): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO system_state (key, value, updatedAt)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updatedAt = excluded.updatedAt
+    `);
+    stmt.run(key, value, Date.now());
+  }
+
+  public getSystemState(key: string): string | undefined {
+    const stmt = this.db.prepare(`SELECT value FROM system_state WHERE key = ?`);
+    const row = stmt.get(key) as { value: string } | undefined;
+    return row?.value;
+  }
+
+  public clearSystemState(key: string): void {
+    this.db.prepare(`DELETE FROM system_state WHERE key = ?`).run(key);
+  }
+
   public wipeAllDataForTesting(): void {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Cannot wipe data in production mode');
@@ -168,6 +197,7 @@ export class IntentJournal {
     this.db.exec(`
       DELETE FROM fills;
       DELETE FROM intents;
+      DELETE FROM system_state;
     `);
   }
 
