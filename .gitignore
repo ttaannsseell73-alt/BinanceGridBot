@@ -6,3 +6,6 @@ data/
 .grid-backups/
 *.zip
 grid-*-v*/
+*.bak*
+src/scalp/
+scalp-v1-overlay/
