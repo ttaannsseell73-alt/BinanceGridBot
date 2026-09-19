@@ -93,7 +93,7 @@ export function resolveQuantExecution(params: {
   if (
     params.realQuantScore === null ||
     params.activePriceAction === null ||
-    params.realQuantScore.modelSource === 'NONE'
+    params.realQuantScore.modelSource !== 'EXACT'
   ) {
     return {
       canExecute: false,
