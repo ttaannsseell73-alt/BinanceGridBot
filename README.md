@@ -14,6 +14,16 @@ This project implements the canonical architecture specification v2.1. It is des
 - **Watchdog**: Monitors WebSocket latency for both market data and user stream. Stops trading if data is stale.
 - **Deterministic Test Suite**: Complete test coverage for critical network failure scenarios (dropped POST responses, partial fills, sequence drift).
 
+## Current Checkpoint
+
+- **Scope:** Grid bot only. Scalp code is intentionally kept out of this repository.
+- **Environment:** Binance Futures **TESTNET**. Mainnet is not enabled by this checkpoint.
+- **Quant:** V2 fixed-horizon model is loaded in **SHADOW** mode by default. Set `QUANT_LIVE_ENABLED=true` only after live shadow validation is complete.
+- **Price Action warm-start:** 1000 closed 1m candles are loaded before live scoring so market structure is mature at startup.
+- **Execution:** Grid episodes remain stable between recenter events; inventory fills do not continuously re-price resting orders.
+- **Reconciliation:** Uses bounded exchange history to avoid per-intent REST bursts.
+- **Open Interest:** Live OI delta is tracked while duplicate snapshots are ignored.
+
 ## Getting Started
 
 Refer to the [TESTNET_RUNBOOK.md](./TESTNET_RUNBOOK.md) for detailed instructions on how to set up, test, and run the bot safely on Binance Testnet.
