@@ -35,6 +35,9 @@ export class FakeBinanceExchange extends EventEmitter {
   public hedgeMode = false;
   public marginType: 'ISOLATED' | 'CROSSED' = 'ISOLATED';
   public leverage = 2;
+  public entryPrice = 50000;
+  public markPrice = 50000;
+  public liquidationPrice = 25000;
   public emergencyCloseCalls = 0;
   public lastEmergencyCloseAmount = 0;
   
