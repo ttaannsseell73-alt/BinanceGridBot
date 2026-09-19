@@ -46,6 +46,17 @@ describe('IntentJournal', () => {
     expect(retrieved?.symbol).toBe('BTCUSDT');
   });
 
+  it('should persist and clear system state', () => {
+    journal.setSystemState('EMERGENCY_HALTED', '1');
+    journal.setSystemState('EMERGENCY_REASON', 'ADVERSE_PRICE_MOVE');
+
+    expect(journal.getSystemState('EMERGENCY_HALTED')).toBe('1');
+    expect(journal.getSystemState('EMERGENCY_REASON')).toBe('ADVERSE_PRICE_MOVE');
+
+    journal.clearSystemState('EMERGENCY_HALTED');
+    expect(journal.getSystemState('EMERGENCY_HALTED')).toBeUndefined();
+  });
+
   it('should process unique fills and reject duplicates', () => {
     const intent: OrderIntent = {
       clientOrderId: 'order-1',
