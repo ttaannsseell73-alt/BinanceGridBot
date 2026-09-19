@@ -1,7 +1,7 @@
 import { OrderIntent, LifecycleState } from '../models/types';
 import crypto from 'crypto';
 
-import { QuantScore } from '../models/strategy';
+import { PriceActionFeatures, QuantScore } from '../models/strategy';
 
 export interface StrategyConfig {
   symbol: string;
@@ -18,8 +18,14 @@ export interface StrategyConfig {
 export class StrategyEngine {
   constructor(private config: StrategyConfig) {}
 
-  public generateGrid(currentPrice: number, paFeatures: any, currentPosition: number, quantScore: QuantScore): OrderIntent[] {
+  public generateGrid(currentPrice: number, paFeatures: PriceActionFeatures | null, currentPosition: number, quantScore: QuantScore): OrderIntent[] {
     const intents: OrderIntent[] = [];
+
+    // Breakout is a no-new-entry regime. Existing order cancellation is handled
+    // by App before this method is asked to create a fresh grid.
+    if (paFeatures?.breakoutUp || paFeatures?.breakoutDown) {
+      return intents;
+    }
     
     // Check quant validation gates (Sample Size)
     if (quantScore.sampleCount < this.config.minSamples) {
