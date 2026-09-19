@@ -13,7 +13,7 @@ const envSchema = z.object({
   SYMBOL: z.string().default('BTCUSDT'),
   QUANT_EXECUTION_MODE: z
     .enum(['SHADOW', 'SMOKE_TESTNET', 'REAL_TESTNET', 'REAL_LIVE'])
-    .default('REAL_TESTNET'),
+    .default('SHADOW'),
   I_UNDERSTAND_QUANT_LIVE: z.string().default('NO'),
   // Risk Limits
   MAX_LONG_EXPOSURE: z.coerce.number().default(1.0),
