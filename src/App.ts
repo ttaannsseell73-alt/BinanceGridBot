@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 import { PriceActionEngine } from './strategy/PriceActionEngine';
 import { MicrostructureEngine } from './strategy/MicrostructureEngine';
@@ -17,7 +16,7 @@ import { StrategyEngine } from './strategy/StrategyEngine';
 import { Watchdog } from './engine/Watchdog';
 import { LifecycleState } from './models/types';
 import { OpenInterestTracker, OiDelta } from './strategy/OpenInterestTracker';
-import { QuantEngine, QuantModel } from './strategy/QuantEngine';
+import { QuantEngine } from './strategy/QuantEngine';
 import { assertExchangeEnvironmentSafe } from './config/exchangeSafety';
 import { syncStartupRiskState } from './engine/StartupRiskSync';
 import { ensureStartupSymbolRiskConfig } from './engine/StartupSymbolConfig';
@@ -25,6 +24,7 @@ import { EmergencyReason, EmergencyRiskEngine } from './engine/EmergencyRiskEngi
 import { executeEmergencyExit } from './engine/EmergencyExitEngine';
 import { assertQuantExecutionModeSafe, resolveQuantExecution } from './strategy/QuantExecutionPolicy';
 import { LiveQuantObserver, LiveQuantObservationEvent } from './simulation/LiveQuantObserver';
+import { QuantModelStore } from './simulation/QuantModelStore';
 
 export class App {
   private journal: IntentJournal;
@@ -77,6 +77,10 @@ export class App {
     process.cwd(),
     'data',
     `quant_model_${config.SYMBOL}.live.json`
+  );
+  private readonly quantModelStore = new QuantModelStore(
+    this.quantRuntimeModelPath,
+    this.quantBaseModelPath
   );
   private liveQuantObserver: LiveQuantObserver;
   constructor() {
@@ -147,29 +151,34 @@ export class App {
   }
 
   private loadQuantModel(): void {
-    const candidates = [
-      this.quantRuntimeModelPath,
-      this.quantBaseModelPath
-    ];
+    const candidates = this.quantModelStore.loadCandidates();
 
-    for (const modelPath of candidates) {
-      if (!fs.existsSync(modelPath)) continue;
-
+    for (const candidate of candidates) {
       try {
-        const raw = fs.readFileSync(modelPath, 'utf8');
-        const model = JSON.parse(raw) as QuantModel;
-        const observations = this.quantEngine.importModel(model);
-        this.quantModelLoaded = observations > 0;
+        const observations = this.quantEngine.importModel(candidate.model);
 
+        if (observations <= 0) {
+          logger.warn({
+            modelPath: candidate.modelPath,
+            source: candidate.source
+          }, 'Quant model candidate contained no usable observations');
+          continue;
+        }
+
+        this.quantModelLoaded = true;
         logger.info({
-          modelPath,
+          modelPath: candidate.modelPath,
+          source: candidate.source,
           observations,
-          quantExecutionMode: this.quantExecutionMode,
-          runtimeModel: modelPath === this.quantRuntimeModelPath
+          quantExecutionMode: this.quantExecutionMode
         }, 'Quant model loaded');
         return;
       } catch (err) {
-        logger.error({ err, modelPath }, 'Failed to load Quant model candidate');
+        logger.error({
+          err,
+          modelPath: candidate.modelPath,
+          source: candidate.source
+        }, 'Failed to import Quant model candidate');
       }
     }
 
@@ -182,16 +191,7 @@ export class App {
   }
 
   private persistRuntimeQuantModel(): void {
-    const dir = path.dirname(this.quantRuntimeModelPath);
-    fs.mkdirSync(dir, { recursive: true });
-
-    const tmpPath = `${this.quantRuntimeModelPath}.tmp`;
-    fs.writeFileSync(
-      tmpPath,
-      JSON.stringify(this.quantEngine.exportModel()),
-      'utf8'
-    );
-    fs.renameSync(tmpPath, this.quantRuntimeModelPath);
+    this.quantModelStore.saveRuntime(this.quantEngine.exportModel());
     this.quantModelLoaded = this.quantEngine.getObservationCount() > 0;
   }
 
