@@ -1,0 +1,63 @@
+import { IBinanceClient, OrderRequest, OrderResponse } from '../gateways/IBinanceClient';
+import { FakeBinanceExchange, FakeOrder } from '../tests/FakeBinanceExchange';
+
+export class FakeBinanceClient implements IBinanceClient {
+  constructor(private exchange: FakeBinanceExchange) {}
+
+  private mapOrder(order: FakeOrder): OrderResponse {
+    return {
+      clientOrderId: order.clientOrderId,
+      orderId: order.orderId,
+      symbol: order.symbol,
+      status: order.status,
+      side: order.side,
+      price: order.price,
+      origQty: order.origQty,
+      executedQty: order.executedQty,
+      updateTime: order.updateTime,
+    };
+  }
+
+  async postOrder(params: OrderRequest): Promise<OrderResponse> {
+    const order = this.exchange.placeOrder(params);
+    return this.mapOrder(order);
+  }
+
+  async cancelOrder(symbol: string, origClientOrderId: string): Promise<OrderResponse> {
+    const order = this.exchange.cancelOrder(origClientOrderId);
+    return this.mapOrder(order);
+  }
+
+  async getOrder(symbol: string, origClientOrderId: string): Promise<OrderResponse | null> {
+    const order = this.exchange.getOrder(origClientOrderId);
+    return order ? this.mapOrder(order) : null;
+  }
+
+  async getOpenOrders(symbol: string): Promise<OrderResponse[]> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+
+    const openOrders: OrderResponse[] = [];
+    for (const [clientId, order] of (this.exchange as any).orders.entries()) {
+      if (order.symbol === symbol && (order.status === 'NEW' || order.status === 'PARTIALLY_FILLED')) {
+        openOrders.push(this.mapOrder(order));
+      }
+    }
+    return openOrders;
+  }
+
+  async getAllOrders(symbol: string, limit: number = 1000): Promise<OrderResponse[]> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+
+    const orders: OrderResponse[] = [];
+    for (const [, order] of (this.exchange as any).orders.entries()) {
+      if (order.symbol === symbol) {
+        orders.push(this.mapOrder(order));
+      }
+    }
+
+    orders.sort((a, b) => b.updateTime - a.updateTime);
+    return orders.slice(0, Math.max(1, Math.min(1000, Math.floor(limit))));
+  }
+}

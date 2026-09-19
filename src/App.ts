@@ -1,0 +1,484 @@
+import fs from 'fs';
+import path from 'path';
+import { PriceActionEngine } from './strategy/PriceActionEngine';
+import { MicrostructureEngine } from './strategy/MicrostructureEngine';
+import { Candle, Tick, PriceActionFeatures, MicrostructureFeatures, QuantScore } from './models/strategy';
+import { config } from './config';
+import { logger } from './utils/logger';
+import { IntentJournal } from './db/IntentJournal';
+import { RiskGuard } from './engine/RiskGuard';
+import { BinanceRestClient } from './gateways/BinanceRestClient';
+import { BinanceMarketGateway } from './gateways/BinanceMarketGateway';
+import { BinanceUserGateway } from './gateways/BinanceUserGateway';
+import { ExecutionEngine } from './engine/ExecutionEngine';
+import { OrderTracker } from './engine/OrderTracker';
+import { Reconciler } from './engine/Reconciler';
+import { StrategyEngine } from './strategy/StrategyEngine';
+import { Watchdog } from './engine/Watchdog';
+import { LifecycleState } from './models/types';
+import { OpenInterestTracker, OiDelta } from './strategy/OpenInterestTracker';
+import { QuantEngine, QuantModel } from './strategy/QuantEngine';
+
+export class App {
+  private journal: IntentJournal;
+  private riskGuard: RiskGuard;
+  private restClient: BinanceRestClient;
+  private marketGateway: BinanceMarketGateway;
+  private userGateway: BinanceUserGateway;
+  private executionEngine: ExecutionEngine;
+  private orderTracker: OrderTracker;
+  private reconciler: Reconciler;
+  private strategyEngine: StrategyEngine;
+  private watchdog: Watchdog;
+
+  private strategyInterval: NodeJS.Timeout | null = null;
+  private reconciliationInterval: NodeJS.Timeout | null = null;
+  private openInterestInterval: NodeJS.Timeout | null = null;
+
+  private readonly gridSpacing = 100;
+  private readonly gridRecenterThreshold = 100;
+  private gridAnchorPrice: number | null = null;
+  private pendingGridAnchorPrice: number | null = null;
+
+  private priceActionEngine = new PriceActionEngine();
+  private microstructureEngine = new MicrostructureEngine(60000);
+  private activePA: PriceActionFeatures | null = null;
+  private activeMS: MicrostructureFeatures | null = null;
+  private aggTradeCount = 0;
+  private openInterestTracker = new OpenInterestTracker();
+  private currentOiDelta: OiDelta = 'UNAVAILABLE_DUE_TO_DATA';
+  private quantEngine = new QuantEngine({
+    feeRate: 0.0004,
+    syntheticSlippage: 0.0001,
+    minSamples: 10
+  });
+  private quantModelLoaded = false;
+  private readonly quantLiveEnabled =
+    String(process.env.QUANT_LIVE_ENABLED ?? 'false').toLowerCase() === 'true';
+  private readonly quantModelPath = path.join(
+    process.cwd(),
+    'artifacts',
+    `quant_model_${config.SYMBOL}.json`
+  );
+  constructor() {
+    this.journal = new IntentJournal(config.DB_PATH);
+    this.riskGuard = new RiskGuard(
+      this.journal,
+      config.MAX_LONG_EXPOSURE,
+      config.MAX_SHORT_EXPOSURE,
+      config.MAX_TOTAL_NOTIONAL
+    );
+    this.restClient = new BinanceRestClient(
+      config.BINANCE_FUTURES_URL,
+      config.BINANCE_API_KEY,
+      config.BINANCE_API_SECRET
+    );
+    this.marketGateway = new BinanceMarketGateway(config.BINANCE_FUTURES_WS_URL, config.SYMBOL);
+    this.userGateway = new BinanceUserGateway(
+      config.BINANCE_FUTURES_URL,
+      config.BINANCE_FUTURES_WS_URL,
+      config.BINANCE_API_KEY
+    );
+    this.executionEngine = new ExecutionEngine(this.restClient, this.journal);
+    this.orderTracker = new OrderTracker(this.journal, this.riskGuard);
+    this.reconciler = new Reconciler(this.restClient, this.journal, config.SYMBOL);
+    
+    // Very simple grid config
+    this.strategyEngine = new StrategyEngine({
+      symbol: config.SYMBOL,
+      gridLevels: 3,
+      gridSpacing: this.gridSpacing, // example 100 USDT
+      baseOrderQty: 0.01,
+      skewFactor: 0.5,
+      minExpectancy: 0.0010,
+      minSamples: 10,
+      safetyMultiplier: 1.5,
+      expectedCostBps: 0.0018
+    });
+    
+    this.watchdog = new Watchdog();
+    this.loadQuantModel();
+    this.setupEvents();
+  }
+
+  private loadQuantModel(): void {
+    if (!fs.existsSync(this.quantModelPath)) {
+      logger.warn({
+        modelPath: this.quantModelPath,
+        quantLiveEnabled: this.quantLiveEnabled
+      }, 'Quant model not found; real Quant remains in shadow/unavailable mode');
+      return;
+    }
+
+    try {
+      const raw = fs.readFileSync(this.quantModelPath, 'utf8');
+      const model = JSON.parse(raw) as QuantModel;
+      const observations = this.quantEngine.importModel(model);
+      this.quantModelLoaded = observations > 0;
+
+      logger.info({
+        modelPath: this.quantModelPath,
+        observations,
+        quantLiveEnabled: this.quantLiveEnabled
+      }, 'Quant model loaded');
+    } catch (err) {
+      this.quantModelLoaded = false;
+      logger.error({ err, modelPath: this.quantModelPath }, 'Failed to load Quant model');
+    }
+  }
+
+  private getRealQuantScore(): QuantScore | null {
+    if (!this.quantModelLoaded || !this.activePA || !this.activeMS) {
+      return null;
+    }
+
+    return this.quantEngine.evaluate(this.activePA, this.activeMS);
+  }
+
+  private async warmStartPriceAction(): Promise<void> {
+    try {
+      const candles = await this.restClient.getRecentKlines(
+        config.SYMBOL,
+        '1m',
+        100
+      );
+
+      let latest: PriceActionFeatures | null = null;
+      for (const candle of candles) {
+        latest = this.priceActionEngine.processCandle(candle);
+      }
+
+      this.activePA = latest;
+
+      if (latest) {
+        logger.info({
+          symbol: config.SYMBOL,
+          candles: candles.length,
+          marketStructure: latest.marketStructure,
+          inRange: latest.inRange,
+          breakoutUp: latest.breakoutUp,
+          breakoutDown: latest.breakoutDown,
+          liquiditySweepUp: latest.liquiditySweepUp,
+          liquiditySweepDown: latest.liquiditySweepDown
+        }, 'Price action warm-start complete');
+      } else {
+        logger.warn({ symbol: config.SYMBOL }, 'Price action warm-start returned no closed candles');
+      }
+    } catch (err) {
+      this.activePA = null;
+      logger.warn({ err, symbol: config.SYMBOL }, 'Price action warm-start failed; waiting for live candles');
+    }
+  }
+
+  private setupEvents() {
+    this.marketGateway.on('price_update', () => {
+      this.watchdog.pingMarket();
+    });
+
+    this.marketGateway.on('kline_close', (candle: Candle) => {
+      this.activePA = this.priceActionEngine.processCandle(candle);
+
+      logger.info({
+        candleTimestamp: candle.timestamp,
+        close: candle.close,
+        marketStructure: this.activePA.marketStructure,
+        inRange: this.activePA.inRange,
+        breakoutUp: this.activePA.breakoutUp,
+        breakoutDown: this.activePA.breakoutDown,
+        liquiditySweepUp: this.activePA.liquiditySweepUp,
+        liquiditySweepDown: this.activePA.liquiditySweepDown
+      }, 'Live price action updated');
+    });
+
+    this.marketGateway.on('agg_trade', (tick: Tick) => {
+      const calculated =
+        this.microstructureEngine.processTick(
+          tick,
+          this.currentOiDelta
+        );
+
+      this.activeMS = calculated;
+
+      this.aggTradeCount++;
+
+      if (this.aggTradeCount === 1) {
+        logger.info({
+          tick,
+          microstructure: this.activeMS
+        }, 'Live microstructure initialized (OI pending)');
+      }
+    });
+
+    this.userGateway.on('order_trade_update', (payload) => {
+      this.watchdog.pingUser();
+      this.orderTracker.handleTradeUpdate(payload);
+    });
+
+    this.watchdog.on(
+      'stale_market',
+      () => this.shutdown('Stale market data')
+    );
+
+    this.watchdog.on(
+      'stale_user',
+      () => this.shutdown('Stale user stream')
+    );
+  }
+
+  public async start() {
+    logger.info('Starting Binance Futures Grid Bot');
+    
+    // Initial Reconciliation
+    await this.reconciler.reconcile();
+    if (this.reconciler.isHalted) {
+      this.shutdown('Halted by reconciler during startup');
+      return;
+    }
+
+    // Warm-start PA from the same configured Binance environment before
+    // live scoring begins. This prevents a cold-start NONE/RNG:false state
+    // from being compared against a fully warmed historical model.
+    await this.warmStartPriceAction();
+
+    // Connect Gateways
+    this.marketGateway.connect();
+    await this.userGateway.connect();
+    this.watchdog.start();
+
+    // Prime Open Interest before strategy activity, then keep it fresh.
+    await this.refreshOpenInterest();
+    this.openInterestInterval = setInterval(
+      () => void this.refreshOpenInterest(),
+      5000
+    );
+
+    // Start loops
+    this.reconciliationInterval = setInterval(() => {
+      this.reconciler.reconcile();
+      if (this.reconciler.isHalted) {
+         this.shutdown('Halted by reconciler');
+      }
+    }, 60000); // Every 1 min
+
+    this.strategyInterval = setInterval(() => this.runStrategyCycle(), 5000); // Every 5 sec
+  }
+
+  private async refreshOpenInterest(): Promise<void> {
+    try {
+      const snapshot =
+        await this.restClient.getOpenInterest(config.SYMBOL);
+
+      const previousOpenInterest =
+        this.openInterestTracker.getPreviousOpenInterest();
+      const previousSnapshotTime =
+        this.openInterestTracker.getLastSnapshotTime();
+
+      this.currentOiDelta =
+        this.openInterestTracker.update(snapshot.openInterest, snapshot.time);
+
+      const acceptedFreshSnapshot =
+        this.openInterestTracker.getLastSnapshotTime() !== previousSnapshotTime;
+
+      if (!acceptedFreshSnapshot) {
+        return;
+      }
+
+      if (previousOpenInterest === null) {
+        logger.info({
+          symbol: config.SYMBOL,
+          openInterest: snapshot.openInterest,
+          exchangeTime: snapshot.time
+        }, 'Live open interest initialized');
+      } else {
+        logger.debug({
+          symbol: config.SYMBOL,
+          openInterest: snapshot.openInterest,
+          oiDelta: this.currentOiDelta,
+          exchangeTime: snapshot.time
+        }, 'Live open interest updated');
+      }
+    } catch (err) {
+      this.currentOiDelta = 'UNAVAILABLE_DUE_TO_DATA';
+      logger.warn({ err }, 'Open interest unavailable; continuing without OI signal');
+    }
+  }
+
+  private async runStrategyCycle() {
+    if (this.reconciler.isHalted) return;
+
+    const currentPrice = this.marketGateway.getCurrentPrice();
+    if (currentPrice === 0) return; // Wait for market data
+
+    const currentPosition = this.riskGuard.getCurrentPosition();
+    const openIntents = this.journal.getOpenIntents();
+    const realQuantScore = this.getRealQuantScore();
+
+    if (this.pendingGridAnchorPrice !== null) {
+      if (openIntents.length > 0) {
+        logger.info({
+          currentPrice,
+          pendingAnchorPrice: this.pendingGridAnchorPrice,
+          openIntents: openIntents.length
+        }, 'Grid recenter waiting for old orders to clear');
+
+        return;
+      }
+
+      this.gridAnchorPrice = this.pendingGridAnchorPrice;
+      this.pendingGridAnchorPrice = null;
+    }
+
+    if (this.gridAnchorPrice === null) {
+      this.gridAnchorPrice = currentPrice;
+    }
+
+    const priceMove = Math.abs(currentPrice - this.gridAnchorPrice);
+
+    if (openIntents.length > 0 && priceMove >= this.gridRecenterThreshold) {
+      this.pendingGridAnchorPrice = currentPrice;
+
+      for (const open of openIntents) {
+        if (
+          open.state === LifecycleState.ACKNOWLEDGED ||
+          open.state === LifecycleState.PARTIALLY_FILLED
+        ) {
+          await this.executionEngine.cancelOrder(open);
+        }
+      }
+
+      logger.info({
+        currentPrice,
+        oldAnchorPrice: this.gridAnchorPrice,
+        pendingAnchorPrice: this.pendingGridAnchorPrice,
+        priceMove
+      }, 'Grid recenter triggered');
+
+      return;
+    }
+
+    if (openIntents.length === 0 && priceMove >= this.gridRecenterThreshold) {
+      this.gridAnchorPrice = currentPrice;
+    }
+
+    // Keep the current grid episode stable.
+    // Inventory changes from fills must not re-price every resting order.
+    // Recenter logic above remains the only path that replaces an active grid.
+    if (openIntents.length > 0) {
+      logger.info({
+        currentPrice,
+        anchorPrice: this.gridAnchorPrice,
+        priceMove,
+        currentPosition,
+        openIntents: openIntents.length,
+        quantMode: this.quantLiveEnabled ? 'REAL_ENABLED' : 'SHADOW',
+        realQuantScore
+      }, 'Grid episode active; keeping resting orders');
+
+      return;
+    }
+
+    const anchorPrice = this.gridAnchorPrice;
+
+    const smokeScore: QuantScore = {
+      expectancy: 0.002,
+      featureHash: 'testnet-smoke',
+      sampleCount: 100,
+      hitRate: 0,
+      averageWin: 0,
+      averageLoss: 0,
+      expectedDurationMs: 0,
+      mae: 0,
+      mfe: 0,
+      modelSource: 'NONE'
+    };
+
+    /*
+     * Safe rollout:
+     * - Default: real Quant is evaluated/logged in SHADOW, existing TESTNET
+     *   smoke score remains the execution gate.
+     * - QUANT_LIVE_ENABLED=true: no fallback to smoke is allowed. Missing
+     *   model/features fail closed and place no new grid.
+     */
+    if (this.quantLiveEnabled && realQuantScore === null) {
+      logger.warn({
+        quantModelLoaded: this.quantModelLoaded,
+        hasPriceAction: this.activePA !== null,
+        hasMicrostructure: this.activeMS !== null
+      }, 'Real Quant enabled but inputs/model are unavailable; skipping grid');
+      return;
+    }
+
+    const executionScore =
+      this.quantLiveEnabled ? realQuantScore! : smokeScore;
+
+    const executionPA =
+      this.quantLiveEnabled ? this.activePA : null;
+
+    const desiredIntents = this.strategyEngine.generateGrid(
+      anchorPrice,
+      executionPA,
+      currentPosition,
+      executionScore
+    );
+
+    logger.info({
+      currentPrice,
+      anchorPrice,
+      priceMove: Math.abs(currentPrice - anchorPrice),
+      currentPosition,
+      desiredIntents: desiredIntents.length,
+      openIntents: openIntents.length,
+      quantMode: this.quantLiveEnabled ? 'REAL_ENABLED' : 'SHADOW',
+      quantModelLoaded: this.quantModelLoaded,
+      realQuantScore,
+      executionScore
+    }, 'Strategy cycle');
+    // Cancel intents that are no longer in desired grid
+    const desiredKeys = new Set(desiredIntents.map(i => `${i.side}-${i.price}`));
+    for (const open of openIntents) {
+      const key = `${open.side}-${open.price}`;
+      if (!desiredKeys.has(key)) {
+         // Need to cancel
+         // Only cancel if it's already ACKNOWLEDGED or PARTIALLY_FILLED
+         if (open.state === LifecycleState.ACKNOWLEDGED || open.state === LifecycleState.PARTIALLY_FILLED) {
+           await this.executionEngine.cancelOrder(open);
+         }
+      }
+    }
+
+    // Place new intents
+    const openKeys = new Set(openIntents.map(i => `${i.side}-${i.price}`));
+    for (const desired of desiredIntents) {
+      const key = `${desired.side}-${desired.price}`;
+      if (!openKeys.has(key)) {
+         if (this.riskGuard.reserveAndSaveIntent(desired)) {
+           logger.info({ desired }, 'Submitting strategy order');
+           await this.executionEngine.submitOrder(desired);
+         }
+      }
+    }
+  }
+
+  public shutdown(reason: string) {
+    logger.warn({ reason }, 'Shutting down bot');
+    if (this.strategyInterval) clearInterval(this.strategyInterval);
+    if (this.reconciliationInterval) clearInterval(this.reconciliationInterval);
+    if (this.openInterestInterval) clearInterval(this.openInterestInterval);
+    
+    this.watchdog.stop();
+    this.marketGateway.disconnect();
+    this.userGateway.disconnect();
+    
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
+  }
+}
+
+
+
+
+
+
+
+

@@ -1,0 +1,165 @@
+import { config } from './config';
+import { logger } from './utils/logger';
+import { IntentJournal } from './db/IntentJournal';
+import { RiskGuard } from './engine/RiskGuard';
+import { BinanceRestClient } from './gateways/BinanceRestClient';
+import { BinanceMarketGateway } from './gateways/BinanceMarketGateway';
+import { BinanceUserGateway } from './gateways/BinanceUserGateway';
+import { ExecutionEngine } from './engine/ExecutionEngine';
+import { OrderTracker } from './engine/OrderTracker';
+import { Reconciler } from './engine/Reconciler';
+import { StrategyEngine } from './strategy/StrategyEngine';
+import { Watchdog } from './engine/Watchdog';
+import { LifecycleState } from './models/types';
+
+export class App {
+  private journal: IntentJournal;
+  private riskGuard: RiskGuard;
+  private restClient: BinanceRestClient;
+  private marketGateway: BinanceMarketGateway;
+  private userGateway: BinanceUserGateway;
+  private executionEngine: ExecutionEngine;
+  private orderTracker: OrderTracker;
+  private reconciler: Reconciler;
+  private strategyEngine: StrategyEngine;
+  private watchdog: Watchdog;
+
+  private strategyInterval: NodeJS.Timeout | null = null;
+  private reconciliationInterval: NodeJS.Timeout | null = null;
+
+  constructor() {
+    this.journal = new IntentJournal(config.DB_PATH);
+    this.riskGuard = new RiskGuard(
+      this.journal,
+      config.MAX_LONG_EXPOSURE,
+      config.MAX_SHORT_EXPOSURE,
+      config.MAX_TOTAL_NOTIONAL
+    );
+    this.restClient = new BinanceRestClient(
+      config.BINANCE_FUTURES_URL,
+      config.BINANCE_API_KEY,
+      config.BINANCE_API_SECRET
+    );
+    this.marketGateway = new BinanceMarketGateway(config.BINANCE_FUTURES_WS_URL, config.SYMBOL);
+    this.userGateway = new BinanceUserGateway(
+      config.BINANCE_FUTURES_URL,
+      config.BINANCE_FUTURES_WS_URL,
+      config.BINANCE_API_KEY
+    );
+    this.executionEngine = new ExecutionEngine(this.restClient, this.journal);
+    this.orderTracker = new OrderTracker(this.journal, this.riskGuard);
+    this.reconciler = new Reconciler(this.restClient, this.journal, config.SYMBOL);
+    
+    // Very simple grid config
+    this.strategyEngine = new StrategyEngine({
+      symbol: config.SYMBOL,
+      gridLevels: 3,
+      gridSpacing: 100, // example 100 USDT
+      baseOrderQty: 0.01,
+      skewFactor: 0.5,
+      minExpectancy: 0.0010,
+      minSamples: 10,
+      safetyMultiplier: 1.5,
+      expectedCostBps: 0.0018
+    });
+    
+    this.watchdog = new Watchdog();
+    this.setupEvents();
+  }
+
+  private setupEvents() {
+    this.marketGateway.on('price_update', () => this.watchdog.pingMarket());
+    
+    this.userGateway.on('order_trade_update', (payload) => {
+      this.watchdog.pingUser();
+      this.orderTracker.handleTradeUpdate(payload);
+    });
+
+    this.watchdog.on('stale_market', () => this.shutdown('Stale market data'));
+    this.watchdog.on('stale_user', () => this.shutdown('Stale user stream'));
+  }
+
+  public async start() {
+    logger.info('Starting Binance Futures Grid Bot');
+    
+    // Initial Reconciliation
+    await this.reconciler.reconcile();
+    if (this.reconciler.isHalted) {
+      this.shutdown('Halted by reconciler during startup');
+      return;
+    }
+
+    // Connect Gateways
+    this.marketGateway.connect();
+    await this.userGateway.connect();
+    this.watchdog.start();
+
+    // Start loops
+    this.reconciliationInterval = setInterval(() => {
+      this.reconciler.reconcile();
+      if (this.reconciler.isHalted) {
+         this.shutdown('Halted by reconciler');
+      }
+    }, 60000); // Every 1 min
+
+    this.strategyInterval = setInterval(() => this.runStrategyCycle(), 5000); // Every 5 sec
+  }
+
+  private async runStrategyCycle() {
+    if (this.reconciler.isHalted) return;
+
+    const currentPrice = this.marketGateway.getCurrentPrice();
+    if (currentPrice === 0) return; // Wait for market data
+
+    const currentPosition = this.riskGuard.getCurrentPosition();
+    const mockScore = { expectancy: 0.002, featureHash: 'testnet-smoke', sampleCount: 100, hitRate: 0, averageWin: 0, averageLoss: 0, expectedDurationMs: 0, mae: 0, mfe: 0 };
+    const desiredIntents = this.strategyEngine.generateGrid(currentPrice, null, currentPosition, mockScore);
+    
+    const openIntents = this.journal.getOpenIntents();
+
+    logger.info({ currentPrice, currentPosition, desiredIntents: desiredIntents.length, openIntents: openIntents.length, mockScore }, 'Strategy cycle');
+
+    // Cancel intents that are no longer in desired grid
+    const desiredKeys = new Set(desiredIntents.map(i => `${i.side}-${i.price}`));
+    for (const open of openIntents) {
+      const key = `${open.side}-${open.price}`;
+      if (!desiredKeys.has(key)) {
+         // Need to cancel
+         // Only cancel if it's already ACKNOWLEDGED or PARTIALLY_FILLED
+         if (open.state === LifecycleState.ACKNOWLEDGED || open.state === LifecycleState.PARTIALLY_FILLED) {
+           await this.executionEngine.cancelOrder(open);
+         }
+      }
+    }
+
+    // Place new intents
+    const openKeys = new Set(openIntents.map(i => `${i.side}-${i.price}`));
+    for (const desired of desiredIntents) {
+      const key = `${desired.side}-${desired.price}`;
+      if (!openKeys.has(key)) {
+         if (this.riskGuard.reserveAndSaveIntent(desired)) {
+           logger.info({ desired }, 'Submitting strategy order');
+           await this.executionEngine.submitOrder(desired);
+         }
+      }
+    }
+  }
+
+  public shutdown(reason: string) {
+    logger.warn({ reason }, 'Shutting down bot');
+    if (this.strategyInterval) clearInterval(this.strategyInterval);
+    if (this.reconciliationInterval) clearInterval(this.reconciliationInterval);
+    
+    this.watchdog.stop();
+    this.marketGateway.disconnect();
+    this.userGateway.disconnect();
+    
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
+  }
+}
+
+
+
+

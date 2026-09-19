@@ -1,0 +1,14 @@
+{
+  "BTCUSDT": {
+    "ablationBasePnl": 0,
+    "stressBasePnl": 0
+  },
+  "ETHUSDT": {
+    "ablationBasePnl": 0,
+    "stressBasePnl": 0
+  },
+  "SOLUSDT": {
+    "ablationBasePnl": 0,
+    "stressBasePnl": 0
+  }
+}

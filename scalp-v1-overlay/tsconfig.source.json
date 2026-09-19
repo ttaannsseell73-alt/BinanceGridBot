@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist-src",
+    "lib": ["ES2022"]
+  },
+  "include": ["src/scalp/FuturesRadarEngine.ts", "src/scalp/TrendBreakEngine.ts", "src/scalp/OrderFlowEngine.ts", "src/scalp/ScalpSignalEngine.ts", "src/scalp/ScalpRiskPolicy.ts", "src/scalp/FastExitEngine.ts", "src/scalp/types.ts"]
+}

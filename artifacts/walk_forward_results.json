@@ -1,0 +1,1541 @@
+[
+  {
+    "periodIndex": 1,
+    "inSampleReport": {
+      "grossPnl": 30,
+      "netPnl": 5.807662499999998,
+      "totalFees": 16.128224999999997,
+      "totalSlippage": 8.064112499999998,
+      "tradeCount": 125,
+      "gridCycleCount": 62,
+      "gridCampaignCount": 19,
+      "averageFillsPerCampaign": 6.578947368421052,
+      "averageCampaignDuration": 242,
+      "capitalUtilization": 0.32101500000000005,
+      "inventoryExcursion": 0.02135999999999999,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5376074999999999,
+      "hitRate": 0.48,
+      "expectancy": 0.0464613,
+      "profitFactor": 1.4615758126894711,
+      "averageWin": 0.30649855,
+      "averageLoss": 0.19357308461538458,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009912894602418267,
+      "exposureTimeMs": 14765,
+      "averageHoldingTimeMs": 118.12,
+      "riskAdjustedReturn": 5.858694894812268,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.5782769999999999,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "HH": {
+          "netPnl": 1.2356290999999993,
+          "tradeCount": 58,
+          "hitRate": 0.43103448275862066
+        },
+        "LL": {
+          "netPnl": 4.802053399999999,
+          "tradeCount": 40,
+          "hitRate": 0.625
+        },
+        "LH": {
+          "netPnl": 0.04533029999999974,
+          "tradeCount": 23,
+          "hitRate": 0.391304347826087
+        },
+        "HL": {
+          "netPnl": 0.3029267,
+          "tradeCount": 1,
+          "hitRate": 1
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.5782769999999999,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "HH_true": {
+          "netPnl": 0.4470021999999993,
+          "tradeCount": 26,
+          "hitRate": 0.4230769230769231
+        },
+        "LL_false": {
+          "netPnl": 1.3824921000000001,
+          "tradeCount": 24,
+          "hitRate": 0.5
+        },
+        "LL_true": {
+          "netPnl": 3.4195613,
+          "tradeCount": 16,
+          "hitRate": 0.8125
+        },
+        "HH_false": {
+          "netPnl": 0.7886268999999997,
+          "tradeCount": 32,
+          "hitRate": 0.4375
+        },
+        "LH_true": {
+          "netPnl": 0.22710460000000005,
+          "tradeCount": 4,
+          "hitRate": 0.5
+        },
+        "LH_false": {
+          "netPnl": -0.18177430000000003,
+          "tradeCount": 19,
+          "hitRate": 0.3684210526315789
+        },
+        "HL_true": {
+          "netPnl": 0.3029267,
+          "tradeCount": 1,
+          "hitRate": 1
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 20,
+      "netPnl": 3.2894119999999982,
+      "totalFees": 11.140392000000002,
+      "totalSlippage": 5.570196000000001,
+      "tradeCount": 85,
+      "gridCycleCount": 42,
+      "gridCampaignCount": 16,
+      "averageFillsPerCampaign": 5.3125,
+      "averageCampaignDuration": 55.0625,
+      "capitalUtilization": 0.33168100000000006,
+      "inventoryExcursion": 0.018941176470588246,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5570196000000001,
+      "hitRate": 0.47058823529411764,
+      "expectancy": 0.03869896470588234,
+      "profitFactor": 1.3716140501547218,
+      "averageWin": 0.30352752499999996,
+      "averageLoss": 0.1967042,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009924842429657437,
+      "exposureTimeMs": 4624,
+      "averageHoldingTimeMs": 54.4,
+      "riskAdjustedReturn": 3.3143216361506855,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.19900859999999998,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LH": {
+          "netPnl": 0.6806473999999993,
+          "tradeCount": 22,
+          "hitRate": 0.45454545454545453
+        },
+        "HH": {
+          "netPnl": -0.43372480000000024,
+          "tradeCount": 20,
+          "hitRate": 0.35
+        },
+        "LL": {
+          "netPnl": 3.116317299999999,
+          "tradeCount": 35,
+          "hitRate": 0.5714285714285714
+        },
+        "HL": {
+          "netPnl": 0.1251806999999998,
+          "tradeCount": 7,
+          "hitRate": 0.42857142857142855
+        }
+      },
+      "featurePerformance": {
+        "NONE_false": {
+          "netPnl": -0.19900859999999998,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LH_false": {
+          "netPnl": -0.07342860000000018,
+          "tradeCount": 8,
+          "hitRate": 0.375
+        },
+        "HH_true": {
+          "netPnl": 0.04779359999999963,
+          "tradeCount": 15,
+          "hitRate": 0.4
+        },
+        "HH_false": {
+          "netPnl": -0.4815184000000001,
+          "tradeCount": 5,
+          "hitRate": 0.2
+        },
+        "LL_true": {
+          "netPnl": 3.384592899999999,
+          "tradeCount": 26,
+          "hitRate": 0.6538461538461539
+        },
+        "LL_false": {
+          "netPnl": -0.26827560000000006,
+          "tradeCount": 9,
+          "hitRate": 0.3333333333333333
+        },
+        "HL_false": {
+          "netPnl": 0.21063909999999986,
+          "tradeCount": 4,
+          "hitRate": 0.5
+        },
+        "LH_true": {
+          "netPnl": 0.7540759999999995,
+          "tradeCount": 14,
+          "hitRate": 0.5
+        },
+        "HL_true": {
+          "netPnl": -0.08545840000000002,
+          "tradeCount": 3,
+          "hitRate": 0.3333333333333333
+        }
+      }
+    }
+  },
+  {
+    "periodIndex": 2,
+    "inSampleReport": {
+      "grossPnl": 12.5,
+      "netPnl": 2.4317419999999985,
+      "totalFees": 6.712172000000002,
+      "totalSlippage": 3.356086000000001,
+      "tradeCount": 55,
+      "gridCycleCount": 27,
+      "gridCampaignCount": 9,
+      "averageFillsPerCampaign": 6.111111111111111,
+      "averageCampaignDuration": 51.22222222222222,
+      "capitalUtilization": 0.3011670000000001,
+      "inventoryExcursion": 0.019636363636363646,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5369737600000001,
+      "hitRate": 0.45454545454545453,
+      "expectancy": 0.04421349090909092,
+      "profitFactor": 1.4431279184718482,
+      "averageWin": 0.31677668000000003,
+      "averageLoss": 0.18292250000000002,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.0000919683746470954,
+      "exposureTimeMs": 2214,
+      "averageHoldingTimeMs": 40.25454545454546,
+      "riskAdjustedReturn": 2.644106747924135,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.18070020000000003,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL": {
+          "netPnl": -0.19455610000000026,
+          "tradeCount": 12,
+          "hitRate": 0.3333333333333333
+        },
+        "HL": {
+          "netPnl": 1.6292601999999996,
+          "tradeCount": 13,
+          "hitRate": 0.6153846153846154
+        },
+        "LH": {
+          "netPnl": 0.13531609999999997,
+          "tradeCount": 2,
+          "hitRate": 0.5
+        },
+        "HH": {
+          "netPnl": 1.0424219999999995,
+          "tradeCount": 27,
+          "hitRate": 0.4444444444444444
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.18070020000000003,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL_true": {
+          "netPnl": -0.7254990000000001,
+          "tradeCount": 4,
+          "hitRate": 0
+        },
+        "HL_true": {
+          "netPnl": 1.0905343999999997,
+          "tradeCount": 5,
+          "hitRate": 0.8
+        },
+        "LL_false": {
+          "netPnl": 0.5309429000000001,
+          "tradeCount": 8,
+          "hitRate": 0.5
+        },
+        "LH_true": {
+          "netPnl": -0.18010020000000002,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "HL_false": {
+          "netPnl": 0.5387257999999998,
+          "tradeCount": 8,
+          "hitRate": 0.5
+        },
+        "HH_true": {
+          "netPnl": 0.29835369999999983,
+          "tradeCount": 12,
+          "hitRate": 0.4166666666666667
+        },
+        "HH_false": {
+          "netPnl": 0.7440682999999998,
+          "tradeCount": 15,
+          "hitRate": 0.4666666666666667
+        },
+        "LH_false": {
+          "netPnl": 0.3154163,
+          "tradeCount": 1,
+          "hitRate": 1
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 17,
+      "netPnl": 3.8395748000000003,
+      "totalFees": 8.773616800000003,
+      "totalSlippage": 4.386808400000001,
+      "tradeCount": 69,
+      "gridCycleCount": 34,
+      "gridCampaignCount": 8,
+      "averageFillsPerCampaign": 8.625,
+      "averageCampaignDuration": 110.75,
+      "capitalUtilization": 0.31725500000000006,
+      "inventoryExcursion": 0.023043478260869582,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5160951058823531,
+      "hitRate": 0.4927536231884058,
+      "expectancy": 0.05564601159420293,
+      "profitFactor": 1.5754085703409972,
+      "averageWin": 0.309186905882353,
+      "averageLoss": 0.19065085714285715,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009547076464923537,
+      "exposureTimeMs": 3892,
+      "averageHoldingTimeMs": 56.405797101449274,
+      "riskAdjustedReturn": 4.021728341767033,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.45255850000000003,
+          "tradeCount": 5,
+          "hitRate": 0.2
+        },
+        "HL": {
+          "netPnl": -0.8318191,
+          "tradeCount": 7,
+          "hitRate": 0.14285714285714285
+        },
+        "LH": {
+          "netPnl": 2.4937661000000007,
+          "tradeCount": 21,
+          "hitRate": 0.6190476190476191
+        },
+        "HH": {
+          "netPnl": 0.5095101000000001,
+          "tradeCount": 13,
+          "hitRate": 0.46153846153846156
+        },
+        "LL": {
+          "netPnl": 2.1206762,
+          "tradeCount": 23,
+          "hitRate": 0.5652173913043478
+        }
+      },
+      "featurePerformance": {
+        "NONE_false": {
+          "netPnl": -0.07230250000000002,
+          "tradeCount": 3,
+          "hitRate": 0.3333333333333333
+        },
+        "NONE_true": {
+          "netPnl": -0.38025600000000004,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "HL_false": {
+          "netPnl": -0.570537,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "HL_true": {
+          "netPnl": -0.2612821,
+          "tradeCount": 4,
+          "hitRate": 0.25
+        },
+        "LH_true": {
+          "netPnl": 0.04577830000000005,
+          "tradeCount": 5,
+          "hitRate": 0.4
+        },
+        "LH_false": {
+          "netPnl": 2.4479878,
+          "tradeCount": 16,
+          "hitRate": 0.6875
+        },
+        "HH_true": {
+          "netPnl": -0.4565932,
+          "tradeCount": 5,
+          "hitRate": 0.2
+        },
+        "HH_false": {
+          "netPnl": 0.9661032999999997,
+          "tradeCount": 8,
+          "hitRate": 0.625
+        },
+        "LL_false": {
+          "netPnl": 2.5247648000000003,
+          "tradeCount": 13,
+          "hitRate": 0.7692307692307693
+        },
+        "LL_true": {
+          "netPnl": -0.40408859999999996,
+          "tradeCount": 10,
+          "hitRate": 0.3
+        }
+      }
+    }
+  },
+  {
+    "periodIndex": 3,
+    "inSampleReport": {
+      "grossPnl": 22.5,
+      "netPnl": 4.705193999999999,
+      "totalFees": 11.863203999999998,
+      "totalSlippage": 5.931601999999999,
+      "tradeCount": 95,
+      "gridCycleCount": 47,
+      "gridCampaignCount": 13,
+      "averageFillsPerCampaign": 7.3076923076923075,
+      "averageCampaignDuration": 87.53846153846153,
+      "capitalUtilization": 0.31314800000000004,
+      "inventoryExcursion": 0.022736842105263163,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.527253511111111,
+      "hitRate": 0.47368421052631576,
+      "expectancy": 0.04952835789473681,
+      "profitFactor": 1.5022701300206862,
+      "averageWin": 0.31273443333333334,
+      "averageLoss": 0.18735711,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009447649778578042,
+      "exposureTimeMs": 2879,
+      "averageHoldingTimeMs": 30.305263157894736,
+      "riskAdjustedReturn": 4.980279868829107,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.37592760000000003,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "LH": {
+          "netPnl": 0.5738852999999997,
+          "tradeCount": 21,
+          "hitRate": 0.42857142857142855
+        },
+        "HL": {
+          "netPnl": 1.8725660999999998,
+          "tradeCount": 14,
+          "hitRate": 0.6428571428571429
+        },
+        "HH": {
+          "netPnl": 1.1965236999999989,
+          "tradeCount": 31,
+          "hitRate": 0.45161290322580644
+        },
+        "LL": {
+          "netPnl": 1.4381465000000002,
+          "tradeCount": 27,
+          "hitRate": 0.48148148148148145
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.37592760000000003,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "LH_true": {
+          "netPnl": 1.8837323999999998,
+          "tradeCount": 14,
+          "hitRate": 0.6428571428571429
+        },
+        "HL_true": {
+          "netPnl": 1.1876259999999998,
+          "tradeCount": 7,
+          "hitRate": 0.7142857142857143
+        },
+        "HH_true": {
+          "netPnl": 0.31691899999999984,
+          "tradeCount": 9,
+          "hitRate": 0.4444444444444444
+        },
+        "HH_false": {
+          "netPnl": 0.8796046999999998,
+          "tradeCount": 22,
+          "hitRate": 0.45454545454545453
+        },
+        "LL_false": {
+          "netPnl": 0.8132193999999999,
+          "tradeCount": 17,
+          "hitRate": 0.47058823529411764
+        },
+        "LL_true": {
+          "netPnl": 0.6249271000000003,
+          "tradeCount": 10,
+          "hitRate": 0.5
+        },
+        "LH_false": {
+          "netPnl": -1.3098471,
+          "tradeCount": 7,
+          "hitRate": 0
+        },
+        "HL_false": {
+          "netPnl": 0.6849400999999999,
+          "tradeCount": 7,
+          "hitRate": 0.5714285714285714
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 0.5,
+      "netPnl": -0.6461818,
+      "totalFees": 0.7641212,
+      "totalSlippage": 0.3820606,
+      "tradeCount": 6,
+      "gridCycleCount": 3,
+      "gridCampaignCount": 2,
+      "averageFillsPerCampaign": 3,
+      "averageCampaignDuration": 4.5,
+      "capitalUtilization": 0.2540404,
+      "inventoryExcursion": 0.018333333333333337,
+      "maxAdverseInventory": 0.04,
+      "feesToGrossEdgeRatio": 1.5282424,
+      "hitRate": 0.16666666666666666,
+      "expectancy": -0.10769696666666669,
+      "profitFactor": 0.3236187937110058,
+      "averageWin": 0.3091697,
+      "averageLoss": 0.1910703,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00007648121263133728,
+      "exposureTimeMs": 82,
+      "averageHoldingTimeMs": 13.666666666666666,
+      "riskAdjustedReturn": -0.8448895849949358,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.19053029999999999,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LH": {
+          "netPnl": -0.26422120000000004,
+          "tradeCount": 4,
+          "hitRate": 0.25
+        },
+        "LL": {
+          "netPnl": -0.19143030000000003,
+          "tradeCount": 1,
+          "hitRate": 0
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.19053029999999999,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LH_true": {
+          "netPnl": 0.3091697,
+          "tradeCount": 1,
+          "hitRate": 1
+        },
+        "LH_false": {
+          "netPnl": -0.5733909,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "LL_false": {
+          "netPnl": -0.19143030000000003,
+          "tradeCount": 1,
+          "hitRate": 0
+        }
+      }
+    }
+  },
+  {
+    "periodIndex": 4,
+    "inSampleReport": {
+      "grossPnl": 42.5,
+      "netPnl": 8.853936499999996,
+      "totalFees": 22.43070900000001,
+      "totalSlippage": 11.215354500000005,
+      "tradeCount": 175,
+      "gridCycleCount": 87,
+      "gridCampaignCount": 32,
+      "averageFillsPerCampaign": 5.46875,
+      "averageCampaignDuration": 165.8125,
+      "capitalUtilization": 0.3195475000000001,
+      "inventoryExcursion": 0.017257142857142825,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5277813882352944,
+      "hitRate": 0.4857142857142857,
+      "expectancy": 0.05059392285714283,
+      "profitFactor": 1.5116858998142564,
+      "averageWin": 0.30773407647058815,
+      "averageLoss": 0.1922606666666667,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009775952801253289,
+      "exposureTimeMs": 21197,
+      "averageHoldingTimeMs": 121.12571428571428,
+      "riskAdjustedReturn": 9.056852748782616,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.19172850000000002,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL": {
+          "netPnl": -0.15143720000000055,
+          "tradeCount": 53,
+          "hitRate": 0.37735849056603776
+        },
+        "LH": {
+          "netPnl": 2.7566413,
+          "tradeCount": 30,
+          "hitRate": 0.5666666666666667
+        },
+        "HL": {
+          "netPnl": 1.994066499999999,
+          "tradeCount": 26,
+          "hitRate": 0.5384615384615384
+        },
+        "HH": {
+          "netPnl": 4.446394400000001,
+          "tradeCount": 65,
+          "hitRate": 0.5230769230769231
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.19172850000000002,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL_true": {
+          "netPnl": 0.7846174999999997,
+          "tradeCount": 22,
+          "hitRate": 0.45454545454545453
+        },
+        "LH_false": {
+          "netPnl": 1.8653220999999998,
+          "tradeCount": 19,
+          "hitRate": 0.5789473684210527
+        },
+        "LH_true": {
+          "netPnl": 0.8913192000000001,
+          "tradeCount": 11,
+          "hitRate": 0.5454545454545454
+        },
+        "HL_true": {
+          "netPnl": 1.6465050999999993,
+          "tradeCount": 20,
+          "hitRate": 0.55
+        },
+        "LL_false": {
+          "netPnl": -0.9360547000000004,
+          "tradeCount": 31,
+          "hitRate": 0.3225806451612903
+        },
+        "HH_true": {
+          "netPnl": 3.0912841,
+          "tradeCount": 28,
+          "hitRate": 0.6071428571428571
+        },
+        "HH_false": {
+          "netPnl": 1.3551102999999993,
+          "tradeCount": 37,
+          "hitRate": 0.4594594594594595
+        },
+        "HL_false": {
+          "netPnl": 0.3475613999999999,
+          "tradeCount": 6,
+          "hitRate": 0.5
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 2.5,
+      "netPnl": -0.39352850000000006,
+      "totalFees": 1.9290190000000005,
+      "totalSlippage": 0.9645095000000002,
+      "tradeCount": 15,
+      "gridCycleCount": 7,
+      "gridCampaignCount": 3,
+      "averageFillsPerCampaign": 5,
+      "averageCampaignDuration": 154,
+      "capitalUtilization": 0.32150750000000006,
+      "inventoryExcursion": 0.018666666666666668,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.7716076000000002,
+      "hitRate": 0.3333333333333333,
+      "expectancy": -0.026235233333333358,
+      "profitFactor": 0.7960258766623853,
+      "averageWin": 0.3071555,
+      "averageLoss": 0.1929306,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009659282049571633,
+      "exposureTimeMs": 1156,
+      "averageHoldingTimeMs": 77.06666666666666,
+      "riskAdjustedReturn": -0.40740967908422565,
+      "regimePerformance": {
+        "LL": {
+          "netPnl": -0.19290449999999998,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LH": {
+          "netPnl": -0.7722024000000001,
+          "tradeCount": 4,
+          "hitRate": 0
+        },
+        "HL": {
+          "netPnl": 0.9226365,
+          "tradeCount": 3,
+          "hitRate": 1
+        },
+        "HH": {
+          "netPnl": -0.35105810000000004,
+          "tradeCount": 7,
+          "hitRate": 0.2857142857142857
+        }
+      },
+      "featurePerformance": {
+        "LL_false": {
+          "netPnl": -0.19290449999999998,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LH_true": {
+          "netPnl": -0.7722024000000001,
+          "tradeCount": 4,
+          "hitRate": 0
+        },
+        "HL_true": {
+          "netPnl": 0.614941,
+          "tradeCount": 2,
+          "hitRate": 1
+        },
+        "HL_false": {
+          "netPnl": 0.3076955,
+          "tradeCount": 1,
+          "hitRate": 1
+        },
+        "HH_true": {
+          "netPnl": -0.35105810000000004,
+          "tradeCount": 7,
+          "hitRate": 0.2857142857142857
+        }
+      }
+    }
+  },
+  {
+    "periodIndex": 5,
+    "inSampleReport": {
+      "grossPnl": 37.5,
+      "netPnl": 7.574137499999998,
+      "totalFees": 19.950575000000015,
+      "totalSlippage": 9.975287500000007,
+      "tradeCount": 155,
+      "gridCycleCount": 77,
+      "gridCampaignCount": 33,
+      "averageFillsPerCampaign": 4.696969696969697,
+      "averageCampaignDuration": 115.57575757575758,
+      "capitalUtilization": 0.3228600000000001,
+      "inventoryExcursion": 0.015483870967741927,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5320153333333337,
+      "hitRate": 0.4838709677419355,
+      "expectancy": 0.0488654032258064,
+      "profitFactor": 1.490246241349202,
+      "averageWin": 0.30698395999999994,
+      "averageLoss": 0.19312074375000005,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009777202857580273,
+      "exposureTimeMs": 15208,
+      "averageHoldingTimeMs": 98.11612903225806,
+      "riskAdjustedReturn": 7.7467324860992965,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.387582,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "LL": {
+          "netPnl": -0.09299859999999999,
+          "tradeCount": 42,
+          "hitRate": 0.38095238095238093
+        },
+        "HH": {
+          "netPnl": 3.8035939000000005,
+          "tradeCount": 63,
+          "hitRate": 0.5079365079365079
+        },
+        "HL": {
+          "netPnl": 2.0907251999999996,
+          "tradeCount": 28,
+          "hitRate": 0.5357142857142857
+        },
+        "LH": {
+          "netPnl": 2.160399,
+          "tradeCount": 20,
+          "hitRate": 0.6
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.387582,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "LL_true": {
+          "netPnl": 0.029128399999999444,
+          "tradeCount": 18,
+          "hitRate": 0.3888888888888889
+        },
+        "HH_true": {
+          "netPnl": 2.1559191999999996,
+          "tradeCount": 25,
+          "hitRate": 0.56
+        },
+        "HL_false": {
+          "netPnl": 0.18957579999999974,
+          "tradeCount": 12,
+          "hitRate": 0.4166666666666667
+        },
+        "HL_true": {
+          "netPnl": 1.9011493999999993,
+          "tradeCount": 16,
+          "hitRate": 0.625
+        },
+        "LL_false": {
+          "netPnl": -0.12212699999999987,
+          "tradeCount": 24,
+          "hitRate": 0.375
+        },
+        "HH_false": {
+          "netPnl": 1.6476747,
+          "tradeCount": 38,
+          "hitRate": 0.47368421052631576
+        },
+        "LH_false": {
+          "netPnl": 1.5077586999999997,
+          "tradeCount": 13,
+          "hitRate": 0.6153846153846154
+        },
+        "LH_true": {
+          "netPnl": 0.6526403000000001,
+          "tradeCount": 7,
+          "hitRate": 0.5714285714285714
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 1,
+      "netPnl": -0.3482065999999999,
+      "totalFees": 0.8988044000000002,
+      "totalSlippage": 0.4494022000000001,
+      "tradeCount": 7,
+      "gridCycleCount": 3,
+      "gridCampaignCount": 1,
+      "averageFillsPerCampaign": 7,
+      "averageCampaignDuration": 22,
+      "capitalUtilization": 0.2566584,
+      "inventoryExcursion": 0.025714285714285714,
+      "maxAdverseInventory": 0.04,
+      "feesToGrossEdgeRatio": 0.8988044000000002,
+      "hitRate": 0.2857142857142857,
+      "expectancy": -0.04974379999999999,
+      "profitFactor": 0.6387782179717398,
+      "averageWin": 0.3078812,
+      "averageLoss": 0.1927938,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00007708751999998639,
+      "exposureTimeMs": 183,
+      "averageHoldingTimeMs": 26.142857142857142,
+      "riskAdjustedReturn": -0.4517029475070172,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.5779314,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "HH": {
+          "netPnl": -0.1929438,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL": {
+          "netPnl": 0.6157624,
+          "tradeCount": 2,
+          "hitRate": 1
+        },
+        "HL": {
+          "netPnl": -0.19309379999999998,
+          "tradeCount": 1,
+          "hitRate": 0
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.5779314,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "HH_false": {
+          "netPnl": -0.1929438,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL_true": {
+          "netPnl": 0.6157624,
+          "tradeCount": 2,
+          "hitRate": 1
+        },
+        "HL_false": {
+          "netPnl": -0.19309379999999998,
+          "tradeCount": 1,
+          "hitRate": 0
+        }
+      }
+    }
+  },
+  {
+    "periodIndex": 6,
+    "inSampleReport": {
+      "grossPnl": 52,
+      "netPnl": 9.916019799999997,
+      "totalFees": 28.055986800000007,
+      "totalSlippage": 14.027993400000003,
+      "tradeCount": 219,
+      "gridCycleCount": 109,
+      "gridCampaignCount": 38,
+      "averageFillsPerCampaign": 5.7631578947368425,
+      "averageCampaignDuration": 143.1315789473684,
+      "capitalUtilization": 0.3228540000000001,
+      "inventoryExcursion": 0.018995433789954295,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5395382076923079,
+      "hitRate": 0.4748858447488584,
+      "expectancy": 0.04527862922374429,
+      "profitFactor": 1.4485456373263268,
+      "averageWin": 0.30791411057692303,
+      "averageLoss": 0.19223519739130426,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00012441960355062985,
+      "exposureTimeMs": 23451,
+      "averageHoldingTimeMs": 107.08219178082192,
+      "riskAdjustedReturn": 7.969821086887557,
+      "regimePerformance": {
+        "HH": {
+          "netPnl": 6.194447699999999,
+          "tradeCount": 77,
+          "hitRate": 0.5454545454545454
+        },
+        "LH": {
+          "netPnl": 0.5806474999999997,
+          "tradeCount": 23,
+          "hitRate": 0.43478260869565216
+        },
+        "LL": {
+          "netPnl": 3.6392396999999987,
+          "tradeCount": 67,
+          "hitRate": 0.4925373134328358
+        },
+        "HL": {
+          "netPnl": -0.49831510000000073,
+          "tradeCount": 52,
+          "hitRate": 0.36538461538461536
+        }
+      },
+      "featurePerformance": {
+        "HH_true": {
+          "netPnl": 3.0752177,
+          "tradeCount": 49,
+          "hitRate": 0.5102040816326531
+        },
+        "LH_true": {
+          "netPnl": 1.3838075,
+          "tradeCount": 11,
+          "hitRate": 0.6363636363636364
+        },
+        "LL_true": {
+          "netPnl": 1.5913233999999994,
+          "tradeCount": 36,
+          "hitRate": 0.4722222222222222
+        },
+        "LL_false": {
+          "netPnl": 2.047916299999999,
+          "tradeCount": 31,
+          "hitRate": 0.5161290322580645
+        },
+        "HL_false": {
+          "netPnl": -0.026097800000000337,
+          "tradeCount": 21,
+          "hitRate": 0.38095238095238093
+        },
+        "HL_true": {
+          "netPnl": -0.47221730000000045,
+          "tradeCount": 31,
+          "hitRate": 0.3548387096774194
+        },
+        "HH_false": {
+          "netPnl": 3.11923,
+          "tradeCount": 28,
+          "hitRate": 0.6071428571428571
+        },
+        "LH_false": {
+          "netPnl": -0.8031600000000003,
+          "tradeCount": 12,
+          "hitRate": 0.25
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 24,
+      "netPnl": 0.5716193999999988,
+      "totalFees": 15.618920400000006,
+      "totalSlippage": 7.809460200000003,
+      "tradeCount": 98,
+      "gridCycleCount": 49,
+      "gridCampaignCount": 13,
+      "averageFillsPerCampaign": 7.538461538461538,
+      "averageCampaignDuration": 33.46153846153846,
+      "capitalUtilization": 0.39593350000000005,
+      "inventoryExcursion": 0.02153061224489797,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.6507883500000002,
+      "hitRate": 0.4897959183673469,
+      "expectancy": 0.005832851020408106,
+      "profitFactor": 1.0478410192101197,
+      "averageWin": 0.26083189374999993,
+      "averageLoss": 0.23896623000000003,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00012029166238800189,
+      "exposureTimeMs": 2343,
+      "averageHoldingTimeMs": 23.908163265306122,
+      "riskAdjustedReturn": 0.4751945302378772,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.4003307999999999,
+          "tradeCount": 8,
+          "hitRate": 0.375
+        },
+        "LL": {
+          "netPnl": 0.4904947999999995,
+          "tradeCount": 44,
+          "hitRate": 0.5
+        },
+        "HL": {
+          "netPnl": -0.38714830000000017,
+          "tradeCount": 10,
+          "hitRate": 0.4
+        },
+        "HH": {
+          "netPnl": -0.2435481000000007,
+          "tradeCount": 26,
+          "hitRate": 0.46153846153846156
+        },
+        "LH": {
+          "netPnl": 1.1121517999999997,
+          "tradeCount": 10,
+          "hitRate": 0.7
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.4749702,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "NONE_false": {
+          "netPnl": 0.07463940000000013,
+          "tradeCount": 6,
+          "hitRate": 0.5
+        },
+        "LL_false": {
+          "netPnl": -0.12199300000000035,
+          "tradeCount": 34,
+          "hitRate": 0.47058823529411764
+        },
+        "HL_false": {
+          "netPnl": 0.044063199999999914,
+          "tradeCount": 4,
+          "hitRate": 0.5
+        },
+        "HL_true": {
+          "netPnl": -0.4312115000000001,
+          "tradeCount": 6,
+          "hitRate": 0.3333333333333333
+        },
+        "LL_true": {
+          "netPnl": 0.6124877999999998,
+          "tradeCount": 10,
+          "hitRate": 0.6
+        },
+        "HH_false": {
+          "netPnl": -0.5840461000000006,
+          "tradeCount": 17,
+          "hitRate": 0.4117647058823529
+        },
+        "HH_true": {
+          "netPnl": 0.34049799999999986,
+          "tradeCount": 9,
+          "hitRate": 0.5555555555555556
+        },
+        "LH_true": {
+          "netPnl": 1.0456094,
+          "tradeCount": 4,
+          "hitRate": 1
+        },
+        "LH_false": {
+          "netPnl": 0.06654239999999984,
+          "tradeCount": 6,
+          "hitRate": 0.5
+        }
+      }
+    }
+  },
+  {
+    "periodIndex": 7,
+    "inSampleReport": {
+      "grossPnl": 9,
+      "netPnl": 1.8253638000000003,
+      "totalFees": 4.783090800000001,
+      "totalSlippage": 2.3915454000000005,
+      "tradeCount": 38,
+      "gridCycleCount": 19,
+      "gridCampaignCount": 7,
+      "averageFillsPerCampaign": 5.428571428571429,
+      "averageCampaignDuration": 186,
+      "capitalUtilization": 0.3159200000000001,
+      "inventoryExcursion": 0.01763157894736843,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.5314545333333335,
+      "hitRate": 0.47368421052631576,
+      "expectancy": 0.048035889473684215,
+      "profitFactor": 1.4831564340632837,
+      "averageWin": 0.31129785000000004,
+      "averageLoss": 0.188899875,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00009463710784985132,
+      "exposureTimeMs": 6463,
+      "averageHoldingTimeMs": 170.07894736842104,
+      "riskAdjustedReturn": 1.928803448744517,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.378954,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "LL": {
+          "netPnl": 0.9827323000000001,
+          "tradeCount": 16,
+          "hitRate": 0.5
+        },
+        "LH": {
+          "netPnl": -0.20690160000000007,
+          "tradeCount": 9,
+          "hitRate": 0.3333333333333333
+        },
+        "HL": {
+          "netPnl": 1.2472466,
+          "tradeCount": 4,
+          "hitRate": 1
+        },
+        "HH": {
+          "netPnl": 0.18124049999999986,
+          "tradeCount": 7,
+          "hitRate": 0.42857142857142855
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.378954,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "LL_true": {
+          "netPnl": -0.19843229999999998,
+          "tradeCount": 9,
+          "hitRate": 0.3333333333333333
+        },
+        "LH_false": {
+          "netPnl": -0.13864790000000002,
+          "tradeCount": 6,
+          "hitRate": 0.3333333333333333
+        },
+        "LH_true": {
+          "netPnl": -0.06825370000000003,
+          "tradeCount": 3,
+          "hitRate": 0.3333333333333333
+        },
+        "LL_false": {
+          "netPnl": 1.1811646000000002,
+          "tradeCount": 7,
+          "hitRate": 0.7142857142857143
+        },
+        "HL_false": {
+          "netPnl": 0.9351510000000001,
+          "tradeCount": 3,
+          "hitRate": 1
+        },
+        "HH_true": {
+          "netPnl": 0.7470536999999999,
+          "tradeCount": 4,
+          "hitRate": 0.75
+        },
+        "HH_false": {
+          "netPnl": -0.5658132,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "HL_true": {
+          "netPnl": 0.31209560000000003,
+          "tradeCount": 1,
+          "hitRate": 1
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 7.5,
+      "netPnl": -0.7139820000000001,
+      "totalFees": 5.475988,
+      "totalSlippage": 2.737994,
+      "tradeCount": 35,
+      "gridCycleCount": 17,
+      "gridCampaignCount": 7,
+      "averageFillsPerCampaign": 5,
+      "averageCampaignDuration": 94.71428571428571,
+      "capitalUtilization": 0.38939550000000006,
+      "inventoryExcursion": 0.01771428571428572,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.7301317333333334,
+      "hitRate": 0.42857142857142855,
+      "expectancy": -0.020399485714285737,
+      "profitFactor": 0.8478698525738608,
+      "averageWin": 0.2652833,
+      "averageLoss": 0.234661575,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00011797111980026265,
+      "exposureTimeMs": 2990,
+      "averageHoldingTimeMs": 85.42857142857143,
+      "riskAdjustedReturn": -0.6052176169971479,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.7004619000000001,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "LL": {
+          "netPnl": 0.5938648999999999,
+          "tradeCount": 6,
+          "hitRate": 0.6666666666666666
+        },
+        "HL": {
+          "netPnl": 0.3575101999999999,
+          "tradeCount": 7,
+          "hitRate": 0.5714285714285714
+        },
+        "HH": {
+          "netPnl": -1.0809107999999998,
+          "tradeCount": 11,
+          "hitRate": 0.2727272727272727
+        },
+        "LH": {
+          "netPnl": 0.11601560000000005,
+          "tradeCount": 8,
+          "hitRate": 0.5
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.46712460000000006,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "NONE_false": {
+          "netPnl": -0.23333730000000003,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL_true": {
+          "netPnl": 0.5938648999999999,
+          "tradeCount": 6,
+          "hitRate": 0.6666666666666666
+        },
+        "HL_false": {
+          "netPnl": 0.32789609999999997,
+          "tradeCount": 5,
+          "hitRate": 0.6
+        },
+        "HH_false": {
+          "netPnl": -1.1429887,
+          "tradeCount": 7,
+          "hitRate": 0.14285714285714285
+        },
+        "HH_true": {
+          "netPnl": 0.062077900000000075,
+          "tradeCount": 4,
+          "hitRate": 0.5
+        },
+        "LH_true": {
+          "netPnl": -0.6786919,
+          "tradeCount": 5,
+          "hitRate": 0.2
+        },
+        "LH_false": {
+          "netPnl": 0.7947075,
+          "tradeCount": 3,
+          "hitRate": 1
+        },
+        "HL_true": {
+          "netPnl": 0.029614099999999977,
+          "tradeCount": 2,
+          "hitRate": 0.5
+        }
+      }
+    }
+  },
+  {
+    "periodIndex": 8,
+    "inSampleReport": {
+      "grossPnl": 13,
+      "netPnl": 0.37111449999999935,
+      "totalFees": 8.419257,
+      "totalSlippage": 4.2096285,
+      "tradeCount": 65,
+      "gridCycleCount": 32,
+      "gridCampaignCount": 9,
+      "averageFillsPerCampaign": 7.222222222222222,
+      "averageCampaignDuration": 118.88888888888889,
+      "capitalUtilization": 0.32417750000000006,
+      "inventoryExcursion": 0.02230769230769232,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.6476351538461539,
+      "hitRate": 0.4,
+      "expectancy": 0.005709453846153845,
+      "profitFactor": 1.0489769767845267,
+      "averageWin": 0.30570923461538463,
+      "averageLoss": 0.19429040000000003,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00013473720217972192,
+      "exposureTimeMs": 3552,
+      "averageHoldingTimeMs": 54.646153846153844,
+      "riskAdjustedReturn": 0.27543580688649066,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.5839695,
+          "tradeCount": 3,
+          "hitRate": 0
+        },
+        "LL": {
+          "netPnl": -0.5088963999999999,
+          "tradeCount": 13,
+          "hitRate": 0.3076923076923077
+        },
+        "HL": {
+          "netPnl": -0.13431670000000018,
+          "tradeCount": 11,
+          "hitRate": 0.36363636363636365
+        },
+        "HH": {
+          "netPnl": 0.04479639999999985,
+          "tradeCount": 28,
+          "hitRate": 0.39285714285714285
+        },
+        "LH": {
+          "netPnl": 1.5535006999999998,
+          "tradeCount": 10,
+          "hitRate": 0.7
+        }
+      },
+      "featurePerformance": {
+        "NONE_true": {
+          "netPnl": -0.389313,
+          "tradeCount": 2,
+          "hitRate": 0
+        },
+        "NONE_false": {
+          "netPnl": -0.1946565,
+          "tradeCount": 1,
+          "hitRate": 0
+        },
+        "LL_true": {
+          "netPnl": -0.9300622999999999,
+          "tradeCount": 10,
+          "hitRate": 0.2
+        },
+        "HL_true": {
+          "netPnl": 0.14133989999999994,
+          "tradeCount": 7,
+          "hitRate": 0.42857142857142855
+        },
+        "HL_false": {
+          "netPnl": -0.2756566000000001,
+          "tradeCount": 4,
+          "hitRate": 0.25
+        },
+        "HH_true": {
+          "netPnl": -0.8337054,
+          "tradeCount": 12,
+          "hitRate": 0.25
+        },
+        "LH_false": {
+          "netPnl": 0.7181925,
+          "tradeCount": 4,
+          "hitRate": 0.75
+        },
+        "LL_false": {
+          "netPnl": 0.4211659,
+          "tradeCount": 3,
+          "hitRate": 0.6666666666666666
+        },
+        "LH_true": {
+          "netPnl": 0.8353082000000001,
+          "tradeCount": 6,
+          "hitRate": 0.6666666666666666
+        },
+        "HH_false": {
+          "netPnl": 0.8785017999999997,
+          "tradeCount": 16,
+          "hitRate": 0.5
+        }
+      }
+    },
+    "outOfSampleReport": {
+      "grossPnl": 25.5,
+      "netPnl": 0.35757599999999806,
+      "totalFees": 16.761616000000004,
+      "totalSlippage": 8.380808000000002,
+      "tradeCount": 106,
+      "gridCycleCount": 53,
+      "gridCampaignCount": 22,
+      "averageFillsPerCampaign": 4.818181818181818,
+      "averageCampaignDuration": 45.68181818181818,
+      "capitalUtilization": 0.39341500000000007,
+      "inventoryExcursion": 0.01632075471698114,
+      "maxAdverseInventory": 0.05000000000000001,
+      "feesToGrossEdgeRatio": 0.6573182745098041,
+      "hitRate": 0.4811320754716981,
+      "expectancy": 0.0033733584905660807,
+      "profitFactor": 1.02741039682662,
+      "averageWin": 0.26280088235294125,
+      "averageLoss": 0.23718670909090908,
+      "mae": 0,
+      "mfe": 0,
+      "maxDrawdown": 0.00011937630406440903,
+      "exposureTimeMs": 3191,
+      "averageHoldingTimeMs": 30.10377358490566,
+      "riskAdjustedReturn": 0.29953683254179936,
+      "regimePerformance": {
+        "NONE": {
+          "netPnl": -0.38824200000000014,
+          "tradeCount": 8,
+          "hitRate": 0.375
+        },
+        "HH": {
+          "netPnl": 0.08643049999999966,
+          "tradeCount": 27,
+          "hitRate": 0.48148148148148145
+        },
+        "HL": {
+          "netPnl": -1.0534694,
+          "tradeCount": 15,
+          "hitRate": 0.3333333333333333
+        },
+        "LL": {
+          "netPnl": 1.4786828999999986,
+          "tradeCount": 38,
+          "hitRate": 0.5526315789473685
+        },
+        "LH": {
+          "netPnl": 0.23417399999999972,
+          "tradeCount": 18,
+          "hitRate": 0.5
+        }
+      },
+      "featurePerformance": {
+        "NONE_false": {
+          "netPnl": -0.44554600000000005,
+          "tradeCount": 4,
+          "hitRate": 0.25
+        },
+        "NONE_true": {
+          "netPnl": 0.05730399999999991,
+          "tradeCount": 4,
+          "hitRate": 0.5
+        },
+        "HH_true": {
+          "netPnl": 0.14538749999999973,
+          "tradeCount": 12,
+          "hitRate": 0.5
+        },
+        "HH_false": {
+          "netPnl": -0.05895700000000029,
+          "tradeCount": 15,
+          "hitRate": 0.4666666666666667
+        },
+        "HL_true": {
+          "netPnl": -1.1814813000000002,
+          "tradeCount": 5,
+          "hitRate": 0
+        },
+        "HL_false": {
+          "netPnl": 0.12801190000000007,
+          "tradeCount": 10,
+          "hitRate": 0.5
+        },
+        "LL_true": {
+          "netPnl": 0.7017263999999996,
+          "tradeCount": 16,
+          "hitRate": 0.5625
+        },
+        "LL_false": {
+          "netPnl": 0.7769564999999994,
+          "tradeCount": 22,
+          "hitRate": 0.5454545454545454
+        },
+        "LH_true": {
+          "netPnl": -0.1883669,
+          "tradeCount": 5,
+          "hitRate": 0.4
+        },
+        "LH_false": {
+          "netPnl": 0.42254089999999966,
+          "tradeCount": 13,
+          "hitRate": 0.5384615384615384
+        }
+      }
+    }
+  }
+]
