@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { StrategyEngine } from '../../strategy/StrategyEngine';
-import { QuantScore } from '../../models/strategy';
+import { PriceActionFeatures, QuantScore } from '../../models/strategy';
 
 describe('StrategyEngine', () => {
   const config = {
@@ -52,5 +52,44 @@ describe('StrategyEngine', () => {
     expect(sells[0].price).toBe(50100);
     expect(sells[1].price).toBe(50200);
     expect(sells[2].price).toBe(50300);
+  });
+  it('should not generate a fresh grid during an upside breakout', () => {
+    const engine = new StrategyEngine(config);
+    const score: QuantScore = { sampleCount: 50, hitRate: 0.6, expectancy: 0.05, averageWin: 0.1, averageLoss: -0.05, mae: -0.1, mfe: 0.2 };
+    const pa: PriceActionFeatures = {
+      swingHighs: [],
+      swingLows: [],
+      marketStructure: 'HH',
+      inRange: false,
+      rangeHigh: 50000,
+      rangeLow: 49000,
+      breakoutUp: true,
+      breakoutDown: false,
+      liquiditySweepUp: false,
+      liquiditySweepDown: false
+    };
+
+    const intents = engine.generateGrid(50100, pa, 0, score);
+    expect(intents).toHaveLength(0);
+  });
+
+  it('should not generate a fresh grid during a downside breakout', () => {
+    const engine = new StrategyEngine(config);
+    const score: QuantScore = { sampleCount: 50, hitRate: 0.6, expectancy: 0.05, averageWin: 0.1, averageLoss: -0.05, mae: -0.1, mfe: 0.2 };
+    const pa: PriceActionFeatures = {
+      swingHighs: [],
+      swingLows: [],
+      marketStructure: 'LL',
+      inRange: false,
+      rangeHigh: 51000,
+      rangeLow: 50000,
+      breakoutUp: false,
+      breakoutDown: true,
+      liquiditySweepUp: false,
+      liquiditySweepDown: false
+    };
+
+    const intents = engine.generateGrid(49900, pa, 0, score);
+    expect(intents).toHaveLength(0);
   });
 });
