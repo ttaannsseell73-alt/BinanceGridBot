@@ -19,6 +19,7 @@ import { LifecycleState } from './models/types';
 import { OpenInterestTracker, OiDelta } from './strategy/OpenInterestTracker';
 import { QuantEngine, QuantModel } from './strategy/QuantEngine';
 import { assertExchangeEnvironmentSafe } from './config/exchangeSafety';
+import { syncStartupRiskState } from './engine/StartupRiskSync';
 
 export class App {
   private journal: IntentJournal;
@@ -245,6 +246,19 @@ export class App {
       this.shutdown('Halted by reconciler during startup');
       return;
     }
+
+    // Hydrate real exchange position before any strategy cycle. Restarting
+    // with an existing futures position while assuming zero exposure is unsafe.
+    const startupPosition = await syncStartupRiskState(
+      this.restClient,
+      this.riskGuard,
+      config.SYMBOL
+    );
+
+    logger.info({
+      symbol: config.SYMBOL,
+      positionAmount: startupPosition
+    }, 'Startup exchange position synchronized');
 
     // Warm-start PA from the same configured Binance environment before
     // live scoring begins. This prevents a cold-start NONE/RNG:false state
