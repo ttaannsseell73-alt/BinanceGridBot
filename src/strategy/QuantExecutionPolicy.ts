@@ -1,4 +1,5 @@
-import { PriceActionFeatures, QuantScore } from '../models/strategy';
+import { MicrostructureFeatures, PriceActionFeatures, QuantScore } from '../models/strategy';
+import { areLiveQuantFeaturesReady } from './FeatureReadiness';
 
 export type QuantExecutionMode =
   | 'SHADOW'
@@ -70,6 +71,7 @@ export function resolveQuantExecution(params: {
   mode: QuantExecutionMode;
   realQuantScore: QuantScore | null;
   activePriceAction: PriceActionFeatures | null;
+  activeMicrostructure: MicrostructureFeatures | null;
   smokeScore: QuantScore;
 }): QuantExecutionDecision {
   if (params.mode === 'SHADOW') {
@@ -92,7 +94,10 @@ export function resolveQuantExecution(params: {
 
   if (
     params.realQuantScore === null ||
-    params.activePriceAction === null ||
+    !areLiveQuantFeaturesReady(
+      params.activePriceAction,
+      params.activeMicrostructure
+    ) ||
     params.realQuantScore.modelSource !== 'EXACT'
   ) {
     return {
