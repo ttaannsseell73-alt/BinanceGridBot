@@ -21,6 +21,8 @@ import { QuantEngine, QuantModel } from './strategy/QuantEngine';
 import { assertExchangeEnvironmentSafe } from './config/exchangeSafety';
 import { syncStartupRiskState } from './engine/StartupRiskSync';
 import { ensureStartupSymbolRiskConfig } from './engine/StartupSymbolConfig';
+import { EmergencyReason, EmergencyRiskEngine } from './engine/EmergencyRiskEngine';
+import { executeEmergencyExit } from './engine/EmergencyExitEngine';
 
 export class App {
   private journal: IntentJournal;
@@ -37,6 +39,7 @@ export class App {
   private strategyInterval: NodeJS.Timeout | null = null;
   private reconciliationInterval: NodeJS.Timeout | null = null;
   private openInterestInterval: NodeJS.Timeout | null = null;
+  private positionRiskInterval: NodeJS.Timeout | null = null;
 
   private readonly gridSpacing = 100;
   private readonly gridRecenterThreshold = 100;
@@ -50,6 +53,12 @@ export class App {
   private aggTradeCount = 0;
   private openInterestTracker = new OpenInterestTracker();
   private currentOiDelta: OiDelta = 'UNAVAILABLE_DUE_TO_DATA';
+  private emergencyExitInProgress = false;
+  private emergencyRiskEngine = new EmergencyRiskEngine({
+    maxAdverseMovePct: 0.03,
+    minLiquidationDistancePct: 0.05,
+    maxConsecutiveCriticalErrors: 10
+  });
   private quantEngine = new QuantEngine({
     feeRate: 0.0004,
     syntheticSlippage: 0.0001,
@@ -240,12 +249,18 @@ export class App {
 
   public async start() {
     logger.info('Starting Binance Futures Grid Bot');
+
+    if (this.journal.getSystemState('EMERGENCY_HALTED') === '1') {
+      const reason = this.journal.getSystemState('EMERGENCY_REASON') ?? 'UNKNOWN';
+      throw new Error(
+        `Persistent emergency halt is active (reason=${reason}). Clear it only after investigation.`
+      );
+    }
     
     // Initial Reconciliation
-    await this.reconciler.reconcile();
-    if (this.reconciler.isHalted) {
-      this.shutdown('Halted by reconciler during startup');
-      return;
+    const initialReconcileOk = await this.reconciler.reconcile();
+    if (!initialReconcileOk || this.reconciler.isHalted) {
+      throw new Error('Startup reconciliation failed or halted');
     }
 
     // Enforce the canonical symbol risk configuration before trading.
@@ -273,6 +288,21 @@ export class App {
       positionAmount: startupPosition
     }, 'Startup exchange position synchronized');
 
+    const startupRisk = await this.restClient.getPositionRisk(config.SYMBOL);
+    if (Math.abs(startupRisk.positionAmt) >= 1e-12 && startupRisk.entryPrice > 0) {
+      this.emergencyRiskEngine.setReferencePrice(startupRisk.entryPrice);
+    }
+
+    const startupLiquidationReason =
+      this.emergencyRiskEngine.evaluateLiquidationDistance(startupRisk);
+    if (startupLiquidationReason) {
+      await this.triggerEmergencyStop(startupLiquidationReason, {
+        stage: 'startup',
+        startupRisk
+      });
+      return;
+    }
+
     // Warm-start PA from the same configured Binance environment before
     // live scoring begins. This prevents a cold-start NONE/RNG:false state
     // from being compared against a fully warmed historical model.
@@ -291,14 +321,118 @@ export class App {
     );
 
     // Start loops
-    this.reconciliationInterval = setInterval(() => {
-      this.reconciler.reconcile();
-      if (this.reconciler.isHalted) {
-         this.shutdown('Halted by reconciler');
-      }
-    }, 60000); // Every 1 min
+    this.reconciliationInterval = setInterval(
+      () => void this.runReconciliationCycle(),
+      60000
+    ); // Every 1 min
 
-    this.strategyInterval = setInterval(() => this.runStrategyCycle(), 5000); // Every 5 sec
+    await this.refreshPositionRisk();
+    this.positionRiskInterval = setInterval(
+      () => void this.refreshPositionRisk(),
+      15000
+    );
+
+    this.strategyInterval = setInterval(
+      () => void this.runStrategyCycle(),
+      5000
+    ); // Every 5 sec
+  }
+
+  private async runReconciliationCycle(): Promise<void> {
+    if (this.emergencyExitInProgress) return;
+
+    const ok = await this.reconciler.reconcile();
+
+    if (this.reconciler.isHalted) {
+      this.shutdown('Halted by reconciler');
+      return;
+    }
+
+    await this.recordCriticalOperation(ok, 'reconciliation');
+  }
+
+  private async refreshPositionRisk(): Promise<void> {
+    if (this.emergencyExitInProgress) return;
+
+    try {
+      const snapshot = await this.restClient.getPositionRisk(config.SYMBOL);
+      this.riskGuard.syncPosition(snapshot.positionAmt);
+
+      if (
+        Math.abs(snapshot.positionAmt) >= 1e-12 &&
+        this.emergencyRiskEngine.getReferencePrice() === null &&
+        snapshot.entryPrice > 0
+      ) {
+        this.emergencyRiskEngine.setReferencePrice(snapshot.entryPrice);
+      }
+
+      const liquidationReason =
+        this.emergencyRiskEngine.evaluateLiquidationDistance(snapshot);
+
+      if (liquidationReason) {
+        await this.triggerEmergencyStop(liquidationReason, { snapshot });
+        return;
+      }
+
+      await this.recordCriticalOperation(true, 'position-risk');
+    } catch (err) {
+      logger.error({ err }, 'Position risk refresh failed');
+      await this.recordCriticalOperation(false, 'position-risk');
+    }
+  }
+
+  private async recordCriticalOperation(
+    success: boolean,
+    context: string
+  ): Promise<void> {
+    if (this.emergencyExitInProgress) return;
+
+    if (success) {
+      this.emergencyRiskEngine.recordCriticalSuccess();
+      return;
+    }
+
+    const reason = this.emergencyRiskEngine.recordCriticalFailure();
+    logger.warn({
+      context,
+      consecutiveCriticalErrors:
+        this.emergencyRiskEngine.getConsecutiveCriticalErrors()
+    }, 'Critical operation failed');
+
+    if (reason) {
+      await this.triggerEmergencyStop(reason, { context });
+    }
+  }
+
+  private async triggerEmergencyStop(
+    reason: EmergencyReason,
+    details: Record<string, unknown> = {}
+  ): Promise<void> {
+    if (this.emergencyExitInProgress) return;
+    this.emergencyExitInProgress = true;
+
+    this.journal.setSystemState('EMERGENCY_HALTED', '1');
+    this.journal.setSystemState('EMERGENCY_REASON', reason);
+    this.journal.setSystemState('EMERGENCY_AT', String(Date.now()));
+
+    if (this.strategyInterval) clearInterval(this.strategyInterval);
+    if (this.reconciliationInterval) clearInterval(this.reconciliationInterval);
+    if (this.openInterestInterval) clearInterval(this.openInterestInterval);
+    if (this.positionRiskInterval) clearInterval(this.positionRiskInterval);
+
+    logger.fatal({ reason, ...details }, 'EMERGENCY KILL SWITCH TRIGGERED');
+
+    try {
+      const result = await executeEmergencyExit(
+        this.restClient,
+        config.SYMBOL
+      );
+      logger.fatal({ reason, result }, 'Emergency exit completed and verified flat');
+    } catch (err) {
+      logger.fatal({ reason, err }, 'Emergency exit failed or could not be fully verified');
+    } finally {
+      this.shutdown(`Emergency kill switch: ${reason}`);
+    }
   }
 
   private async refreshOpenInterest(): Promise<void> {
@@ -342,7 +476,7 @@ export class App {
   }
 
   private async runStrategyCycle() {
-    if (this.reconciler.isHalted) return;
+    if (this.reconciler.isHalted || this.emergencyExitInProgress) return;
 
     const currentPrice = this.marketGateway.getCurrentPrice();
     if (currentPrice === 0) return; // Wait for market data
@@ -350,6 +484,25 @@ export class App {
     const currentPosition = this.riskGuard.getCurrentPosition();
     const openIntents = this.journal.getOpenIntents();
     const realQuantScore = this.getRealQuantScore();
+
+    if (Math.abs(currentPosition) < 1e-12 && openIntents.length === 0) {
+      this.emergencyRiskEngine.setReferencePrice(currentPrice);
+    }
+
+    const adverseMoveReason =
+      this.emergencyRiskEngine.evaluateAdverseMove(
+        currentPrice,
+        currentPosition
+      );
+
+    if (adverseMoveReason) {
+      await this.triggerEmergencyStop(adverseMoveReason, {
+        currentPrice,
+        currentPosition,
+        referencePrice: this.emergencyRiskEngine.getReferencePrice()
+      });
+      return;
+    }
 
     if (this.pendingGridAnchorPrice !== null) {
       if (openIntents.length > 0) {
@@ -382,7 +535,9 @@ export class App {
           open.state === LifecycleState.ACKNOWLEDGED ||
           open.state === LifecycleState.PARTIALLY_FILLED
         ) {
-          await this.executionEngine.cancelOrder(open);
+          const cancelOk = await this.executionEngine.cancelOrder(open);
+          await this.recordCriticalOperation(cancelOk, 'cancel-order');
+          if (this.emergencyExitInProgress) return;
         }
       }
 
@@ -404,7 +559,9 @@ export class App {
           open.state === LifecycleState.ACKNOWLEDGED ||
           open.state === LifecycleState.PARTIALLY_FILLED
         ) {
-          await this.executionEngine.cancelOrder(open);
+          const cancelOk = await this.executionEngine.cancelOrder(open);
+          await this.recordCriticalOperation(cancelOk, 'cancel-order');
+          if (this.emergencyExitInProgress) return;
         }
       }
 
@@ -503,7 +660,9 @@ export class App {
          // Need to cancel
          // Only cancel if it's already ACKNOWLEDGED or PARTIALLY_FILLED
          if (open.state === LifecycleState.ACKNOWLEDGED || open.state === LifecycleState.PARTIALLY_FILLED) {
-           await this.executionEngine.cancelOrder(open);
+           const cancelOk = await this.executionEngine.cancelOrder(open);
+          await this.recordCriticalOperation(cancelOk, 'cancel-order');
+          if (this.emergencyExitInProgress) return;
          }
       }
     }
@@ -515,7 +674,9 @@ export class App {
       if (!openKeys.has(key)) {
          if (this.riskGuard.reserveAndSaveIntent(desired)) {
            logger.info({ desired }, 'Submitting strategy order');
-           await this.executionEngine.submitOrder(desired);
+           const submitOk = await this.executionEngine.submitOrder(desired);
+           await this.recordCriticalOperation(submitOk, 'submit-order');
+           if (this.emergencyExitInProgress) return;
          }
       }
     }

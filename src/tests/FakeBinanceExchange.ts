@@ -35,6 +35,11 @@ export class FakeBinanceExchange extends EventEmitter {
   public hedgeMode = false;
   public marginType: 'ISOLATED' | 'CROSSED' = 'ISOLATED';
   public leverage = 2;
+  public entryPrice = 50000;
+  public markPrice = 50000;
+  public liquidationPrice = 25000;
+  public emergencyCloseCalls = 0;
+  public lastEmergencyCloseAmount = 0;
   
   public getOrder(origClientOrderId: string): FakeOrder | undefined {
     // If drop flag is true, but client asks for REST, we still return if the connection is fine
@@ -94,6 +99,40 @@ export class FakeBinanceExchange extends EventEmitter {
       this.emitWsUpdate(order);
       throw new Error('Network Error: Response dropped');
     }
+  }
+
+  public cancelAllOpenOrders(symbol: string): void {
+    if (this.simulateRestTimeout) throw new Error('Timeout');
+    if (this.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+
+    for (const order of this.orders.values()) {
+      if (
+        order.symbol === symbol &&
+        (order.status === 'NEW' || order.status === 'PARTIALLY_FILLED')
+      ) {
+        order.status = 'CANCELED';
+        order.updateTime = Date.now();
+        this.emitWsUpdate(order);
+      }
+    }
+  }
+
+  public closePositionMarket(positionAmount: number): void {
+    if (this.simulateRestTimeout) throw new Error('Timeout');
+    if (this.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+    if (!Number.isFinite(positionAmount)) throw new Error('Invalid position amount');
+
+    if (Math.abs(positionAmount) < 1e-12) return;
+
+    if (Math.abs(positionAmount - this.positionAmount) > 1e-8) {
+      throw new Error(
+        `Emergency close amount mismatch: requested=${positionAmount}, actual=${this.positionAmount}`
+      );
+    }
+
+    this.emergencyCloseCalls += 1;
+    this.lastEmergencyCloseAmount = positionAmount;
+    this.positionAmount = 0;
   }
 
   public cancelOrder(origClientOrderId: string): FakeOrder {

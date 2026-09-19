@@ -17,8 +17,8 @@ export class Reconciler {
     private symbol: string
   ) {}
 
-  public async reconcile(): Promise<void> {
-    if (this.isHalted) return;
+  public async reconcile(): Promise<boolean> {
+    if (this.isHalted) return false;
     logger.info('Starting reconciliation cycle');
 
     try {
@@ -36,7 +36,7 @@ export class Reconciler {
         if (!intentMap.has(order.clientOrderId)) {
           logger.fatal({ order }, 'OWNERSHIP_VIOLATION: Foreign order detected');
           this.halt();
-          return;
+          return false;
         }
       }
 
@@ -101,7 +101,7 @@ export class Reconciler {
         );
         this.journal.updateIntentState(intent.clientOrderId, LifecycleState.UNKNOWN);
         this.halt();
-        return;
+        return false;
       }
 
       logger.info({
@@ -109,10 +109,12 @@ export class Reconciler {
         recentExchangeOrders: recentOrders.length,
         openLocalIntents: openIntents.length
       }, 'Reconciliation cycle complete');
+      return true;
     } catch (error: any) {
       // Fail closed: do not mutate local intent state when Binance history cannot
       // be obtained. Most importantly, do not fan out into per-order retries.
       logger.error({ err: error }, 'Reconciliation cycle failed');
+      return false;
     }
   }
 

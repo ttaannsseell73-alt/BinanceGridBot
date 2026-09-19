@@ -9,10 +9,10 @@ export class ExecutionEngine {
     private journal: IntentJournal
   ) {}
 
-  public async submitOrder(intent: OrderIntent): Promise<void> {
+  public async submitOrder(intent: OrderIntent): Promise<boolean> {
     if (intent.state !== LifecycleState.RISK_RESERVED) {
       logger.error({ intent }, 'Cannot submit order not in RISK_RESERVED state');
-      return;
+      return false;
     }
 
     // Transition to SUBMITTING before network call
@@ -40,21 +40,25 @@ export class ExecutionEngine {
       
       this.journal.updateIntentState(intent.clientOrderId, nextState, String(response.orderId));
       logger.info({ clientOrderId: intent.clientOrderId, orderId: response.orderId }, 'Order submitted successfully');
+      return true;
     } catch (error: any) {
       logger.error({ err: error, clientOrderId: intent.clientOrderId }, 'Order submission failed or timed out');
       // Mark as SUBMIT_UNKNOWN, DO NOT resubmit immediately, keep exposure reserved
       this.journal.updateIntentState(intent.clientOrderId, LifecycleState.SUBMIT_UNKNOWN);
+      return false;
     }
   }
 
-  public async cancelOrder(intent: OrderIntent): Promise<void> {
+  public async cancelOrder(intent: OrderIntent): Promise<boolean> {
     try {
       const response = await this.client.cancelOrder(intent.symbol, intent.clientOrderId);
       // Wait for WS ORDER_TRADE_UPDATE to confirm cancellation, 
       // but we can log the REST response
       logger.info({ response }, 'Cancel request sent successfully');
+      return true;
     } catch (error: any) {
       logger.error({ err: error, clientOrderId: intent.clientOrderId }, 'Failed to cancel order via REST');
+      return false;
     }
   }
 }
