@@ -10,7 +10,8 @@
     "lint": "eslint src",
     "start": "tsx src/index.ts",
     "clear:halt": "tsx src/tools/clearEmergencyHalt.ts",
-    "quant:readiness": "tsx src/tools/quantReadiness.ts"
+    "quant:readiness": "tsx src/tools/quantReadiness.ts",
+    "start:shadow": "tsx src/tools/runShadow.ts"
   },
   "keywords": [],
   "author": "",
