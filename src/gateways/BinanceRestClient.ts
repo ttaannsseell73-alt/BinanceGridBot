@@ -216,6 +216,51 @@ export class BinanceRestClient implements IBinanceClient {
     }
   }
 
+  async getPositionMode(): Promise<'ONE_WAY' | 'HEDGE'> {
+    const data: any = await this.request(
+      'GET',
+      '/fapi/v1/positionSide/dual',
+      {}
+    );
+
+    return data?.dualSidePosition === true ? 'HEDGE' : 'ONE_WAY';
+  }
+
+  async getPositionAmount(symbol: string): Promise<number> {
+    const data: any = await this.request(
+      'GET',
+      '/fapi/v3/positionRisk',
+      { symbol }
+    );
+
+    const rows: any[] = Array.isArray(data) ? data : [data];
+    const relevant = rows.filter(row => row?.symbol === symbol);
+
+    if (relevant.length === 0) {
+      return 0;
+    }
+
+    let netPosition = 0;
+
+    for (const row of relevant) {
+      const positionSide = String(row?.positionSide ?? 'BOTH').toUpperCase();
+      if (positionSide !== 'BOTH') {
+        throw new Error(
+          `Unsupported hedge-mode position row for ${symbol}: ${positionSide}`
+        );
+      }
+
+      const amount = Number(row?.positionAmt);
+      if (!Number.isFinite(amount)) {
+        throw new Error(`Invalid position amount for ${symbol}`);
+      }
+
+      netPosition += amount;
+    }
+
+    return Number(netPosition.toFixed(8));
+  }
+
   async postOrder(req: OrderRequest): Promise<OrderResponse> {
     const normalized = await this.normalizeOrder(req);
 

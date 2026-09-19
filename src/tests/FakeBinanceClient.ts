@@ -46,6 +46,18 @@ export class FakeBinanceClient implements IBinanceClient {
     return openOrders;
   }
 
+  async getPositionMode(): Promise<'ONE_WAY' | 'HEDGE'> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+    return this.exchange.hedgeMode ? 'HEDGE' : 'ONE_WAY';
+  }
+
+  async getPositionAmount(symbol: string): Promise<number> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+    return this.exchange.positionAmount;
+  }
+
   async getAllOrders(symbol: string, limit: number = 1000): Promise<OrderResponse[]> {
     if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
     if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');

@@ -28,4 +28,6 @@ export interface IBinanceClient {
   getOrder(symbol: string, origClientOrderId: string): Promise<OrderResponse | null>;
   getOpenOrders(symbol: string): Promise<OrderResponse[]>;
   getAllOrders(symbol: string, limit?: number): Promise<OrderResponse[]>;
+  getPositionMode(): Promise<'ONE_WAY' | 'HEDGE'>;
+  getPositionAmount(symbol: string): Promise<number>;
 }
