@@ -4,6 +4,7 @@ import {
   PriceActionFeatures
 } from '../models/strategy';
 import { QuantEngine } from '../strategy/QuantEngine';
+import { isCompleteMicrostructure } from '../strategy/FeatureReadiness';
 import {
   simulateVirtualGridOutcome,
   VirtualGridOutcome
@@ -47,18 +48,6 @@ function cloneMicrostructure(
   ms: MicrostructureFeatures
 ): MicrostructureFeatures {
   return { ...ms };
-}
-
-export function isCompleteMicrostructure(
-  ms: MicrostructureFeatures | null
-): ms is MicrostructureFeatures {
-  return Boolean(
-    ms &&
-    ms.cvd !== 'UNAVAILABLE_DUE_TO_DATA' &&
-    ms.takerImbalance !== 'UNAVAILABLE_DUE_TO_DATA' &&
-    ms.oiDelta !== 'UNAVAILABLE_DUE_TO_DATA' &&
-    ms.absorption !== 'UNAVAILABLE_DUE_TO_DATA'
-  );
 }
 
 /**
