@@ -419,7 +419,6 @@ export class App {
     if (this.reconciliationInterval) clearInterval(this.reconciliationInterval);
     if (this.openInterestInterval) clearInterval(this.openInterestInterval);
     if (this.positionRiskInterval) clearInterval(this.positionRiskInterval);
-    if (this.positionRiskInterval) clearInterval(this.positionRiskInterval);
 
     logger.fatal({ reason, ...details }, 'EMERGENCY KILL SWITCH TRIGGERED');
 
