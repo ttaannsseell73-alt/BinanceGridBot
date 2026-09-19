@@ -20,6 +20,7 @@ import { OpenInterestTracker, OiDelta } from './strategy/OpenInterestTracker';
 import { QuantEngine, QuantModel } from './strategy/QuantEngine';
 import { assertExchangeEnvironmentSafe } from './config/exchangeSafety';
 import { syncStartupRiskState } from './engine/StartupRiskSync';
+import { ensureStartupSymbolRiskConfig } from './engine/StartupSymbolConfig';
 
 export class App {
   private journal: IntentJournal;
@@ -247,6 +248,18 @@ export class App {
       return;
     }
 
+    // Enforce the canonical symbol risk configuration before trading.
+    // Any Binance rejection here fails startup closed.
+    const startupSymbolConfig = await ensureStartupSymbolRiskConfig(
+      this.restClient,
+      config.SYMBOL
+    );
+
+    logger.info({
+      symbol: startupSymbolConfig.symbol,
+      marginType: startupSymbolConfig.marginType,
+      leverage: startupSymbolConfig.leverage
+    }, 'Startup symbol risk configuration verified');
     // Hydrate real exchange position before any strategy cycle. Restarting
     // with an existing futures position while assuming zero exposure is unsafe.
     const startupPosition = await syncStartupRiskState(
