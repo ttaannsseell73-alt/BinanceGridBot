@@ -25,6 +25,7 @@ import { executeEmergencyExit } from './engine/EmergencyExitEngine';
 import { assertQuantExecutionModeSafe, resolveQuantExecution } from './strategy/QuantExecutionPolicy';
 import { LiveQuantObserver, LiveQuantObservationEvent } from './simulation/LiveQuantObserver';
 import { QuantModelStore } from './simulation/QuantModelStore';
+import { sanitizeShadowStartup } from './engine/ShadowStartupCleanup';
 
 export class App {
   private journal: IntentJournal;
@@ -344,6 +345,26 @@ export class App {
     const initialReconcileOk = await this.reconciler.reconcile();
     if (!initialReconcileOk || this.reconciler.isHalted) {
       throw new Error('Startup reconciliation failed or halted');
+    }
+
+    const shadowCleanStartEnabled =
+      this.quantExecutionMode === 'SHADOW' &&
+      String(process.env.SHADOW_CLEAN_START ?? '')
+        .trim()
+        .toLowerCase() === 'yes';
+
+    if (shadowCleanStartEnabled) {
+      const cleanup = await sanitizeShadowStartup(
+        this.restClient,
+        config.SYMBOL,
+        true
+      );
+
+      logger.warn({
+        symbol: config.SYMBOL,
+        closedPositionAmount: cleanup.exit?.closedPositionAmount ?? 0,
+        canceledAllOrders: cleanup.exit?.canceledAllOrders ?? false
+      }, 'SHADOW clean-start completed before symbol risk configuration');
     }
 
     // Enforce the canonical symbol risk configuration before trading.
