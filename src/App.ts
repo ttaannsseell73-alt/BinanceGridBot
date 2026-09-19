@@ -18,6 +18,7 @@ import { Watchdog } from './engine/Watchdog';
 import { LifecycleState } from './models/types';
 import { OpenInterestTracker, OiDelta } from './strategy/OpenInterestTracker';
 import { QuantEngine, QuantModel } from './strategy/QuantEngine';
+import { assertExchangeEnvironmentSafe } from './config/exchangeSafety';
 
 export class App {
   private journal: IntentJournal;
@@ -61,6 +62,12 @@ export class App {
     `quant_model_${config.SYMBOL}.json`
   );
   constructor() {
+    assertExchangeEnvironmentSafe({
+      restUrl: config.BINANCE_FUTURES_URL,
+      wsUrl: config.BINANCE_FUTURES_WS_URL,
+      liveAcknowledgement: process.env.I_UNDERSTAND_LIVE
+    });
+
     this.journal = new IntentJournal(config.DB_PATH);
     this.riskGuard = new RiskGuard(
       this.journal,
