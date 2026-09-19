@@ -26,6 +26,7 @@ import { assertQuantExecutionModeSafe, resolveQuantExecution } from './strategy/
 import { LiveQuantObserver, LiveQuantObservationEvent } from './simulation/LiveQuantObserver';
 import { QuantModelStore } from './simulation/QuantModelStore';
 import { sanitizeShadowStartup } from './engine/ShadowStartupCleanup';
+import { getRuntimePollingIntervals } from './config/RuntimePollingPolicy';
 
 export class App {
   private journal: IntentJournal;
@@ -417,23 +418,33 @@ export class App {
     await this.userGateway.connect();
     this.watchdog.start();
 
+    const pollingIntervals =
+      getRuntimePollingIntervals(this.quantExecutionMode);
+
+    logger.info({
+      quantExecutionMode: this.quantExecutionMode,
+      ...pollingIntervals
+    }, 'Runtime polling cadence configured');
+
     // Prime Open Interest before strategy activity, then keep it fresh.
     await this.refreshOpenInterest();
     this.openInterestInterval = setInterval(
       () => void this.refreshOpenInterest(),
-      5000
+      pollingIntervals.openInterestMs
     );
 
-    // Start loops
+    // In SHADOW the account is verified flat and execution is disabled, so
+    // private-account REST reconciliation/risk polling is deliberately
+    // throttled to avoid Binance testnet shared-IP request-limit noise.
     this.reconciliationInterval = setInterval(
       () => void this.runReconciliationCycle(),
-      60000
-    ); // Every 1 min
+      pollingIntervals.reconciliationMs
+    );
 
     await this.refreshPositionRisk();
     this.positionRiskInterval = setInterval(
       () => void this.refreshPositionRisk(),
-      15000
+      pollingIntervals.positionRiskMs
     );
 
     this.strategyInterval = setInterval(
