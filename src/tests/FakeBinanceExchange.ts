@@ -33,6 +33,8 @@ export class FakeBinanceExchange extends EventEmitter {
   // Account state used by startup-risk synchronization tests.
   public positionAmount = 0;
   public hedgeMode = false;
+  public marginType: 'ISOLATED' | 'CROSSED' = 'ISOLATED';
+  public leverage = 2;
   
   public getOrder(origClientOrderId: string): FakeOrder | undefined {
     // If drop flag is true, but client asks for REST, we still return if the connection is fine
