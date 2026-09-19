@@ -137,10 +137,14 @@ export class App {
 
   private async warmStartPriceAction(): Promise<void> {
     try {
+      // PriceActionEngine needs enough closed 1m history to establish
+      // multiple swing highs/lows. 100 candles was empirically too short and
+      // left live startup at MS:NONE/RNG:false, which could not match the
+      // trained PA model. Binance futures klines supports this bounded depth.
       const candles = await this.restClient.getRecentKlines(
         config.SYMBOL,
         '1m',
-        100
+        1000
       );
 
       let latest: PriceActionFeatures | null = null;
