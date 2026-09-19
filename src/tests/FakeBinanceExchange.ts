@@ -29,6 +29,10 @@ export class FakeBinanceExchange extends EventEmitter {
   public simulateRest500 = false;
   public simulateWsDisconnect = false;
   public dropNextRestResponse = false;
+
+  // Account state used by startup-risk synchronization tests.
+  public positionAmount = 0;
+  public hedgeMode = false;
   
   public getOrder(origClientOrderId: string): FakeOrder | undefined {
     // If drop flag is true, but client asks for REST, we still return if the connection is fine
