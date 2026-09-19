@@ -18,11 +18,12 @@ This project implements the canonical architecture specification v2.1. It is des
 
 - **Scope:** Grid bot only. Scalp code is intentionally kept out of this repository.
 - **Environment:** Binance Futures **TESTNET**. Mainnet is not enabled by this checkpoint.
-- **Quant:** V2 fixed-horizon model is loaded in **SHADOW** mode by default. Set `QUANT_LIVE_ENABLED=true` only after live shadow validation is complete.
+- **Quant:** V2 fixed-horizon model drives **TESTNET** decisions by default via `REAL_TESTNET`. `SHADOW` blocks exposure, `SMOKE_TESTNET` is explicit connectivity-only mode, and `REAL_LIVE` remains double-acknowledgement gated.
 - **Price Action warm-start:** 1000 closed 1m candles are loaded before live scoring so market structure is mature at startup.
 - **Execution:** Grid episodes remain stable between recenter events; inventory fills do not continuously re-price resting orders.
 - **Reconciliation:** Uses bounded exchange history to avoid per-intent REST bursts.
 - **Open Interest:** Live OI delta is tracked while duplicate snapshots are ignored.
+- **Emergency risk:** 3% adverse-move, 5% liquidation-distance, and 10-consecutive-critical-error kill switches cancel resting orders, flatten inventory, verify flat, and persist a halt across restart.
 
 ## Getting Started
 
