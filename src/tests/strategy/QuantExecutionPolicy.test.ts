@@ -29,7 +29,7 @@ const realScore: QuantScore = {
   averageLoss: -0.001,
   mae: -0.003,
   mfe: 0.004,
-  modelSource: 'PA_FALLBACK'
+  modelSource: 'EXACT'
 };
 
 const pa: PriceActionFeatures = {
@@ -95,8 +95,8 @@ describe('QuantExecutionPolicy', () => {
     expect(decision.reason).toBe('SHADOW_MODE');
   });
 
-  it('real mode fails closed when the model has no matching state', () => {
-    const noMatch = { ...realScore, modelSource: 'NONE' as const };
+  it('real mode fails closed for PA-only fallback or no matching state', () => {
+    const noMatch = { ...realScore, modelSource: 'PA_FALLBACK' as const };
     const decision = resolveQuantExecution({
       mode: 'REAL_TESTNET',
       realQuantScore: noMatch,
@@ -106,9 +106,17 @@ describe('QuantExecutionPolicy', () => {
 
     expect(decision.canExecute).toBe(false);
     expect(decision.reason).toBe('REAL_QUANT_UNAVAILABLE');
+
+    const none = resolveQuantExecution({
+      mode: 'REAL_TESTNET',
+      realQuantScore: { ...realScore, modelSource: 'NONE' },
+      activePriceAction: pa,
+      smokeScore
+    });
+    expect(none.canExecute).toBe(false);
   });
 
-  it('real mode passes the real score and price action when ready', () => {
+  it('real mode passes only an exact live-feature score when ready', () => {
     const decision = resolveQuantExecution({
       mode: 'REAL_TESTNET',
       realQuantScore: realScore,
