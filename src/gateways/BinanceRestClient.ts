@@ -1,4 +1,4 @@
-import { IBinanceClient, OrderRequest, OrderResponse } from './IBinanceClient';
+import { IBinanceClient, OrderRequest, OrderResponse, SymbolRiskConfig } from './IBinanceClient';
 import axios from 'axios';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
@@ -259,6 +259,60 @@ export class BinanceRestClient implements IBinanceClient {
     }
 
     return Number(netPosition.toFixed(8));
+  }
+
+  async getSymbolRiskConfig(symbol: string): Promise<SymbolRiskConfig> {
+    const data: any = await this.request(
+      'GET',
+      '/fapi/v1/symbolConfig',
+      { symbol }
+    );
+
+    const rows: any[] = Array.isArray(data) ? data : [data];
+    const row = rows.find(item => item?.symbol === symbol);
+
+    if (!row) {
+      throw new Error(`Binance symbol risk config missing for ${symbol}`);
+    }
+
+    const rawMarginType = String(row.marginType ?? '').toUpperCase();
+    if (rawMarginType !== 'ISOLATED' && rawMarginType !== 'CROSSED') {
+      throw new Error(`Invalid margin type for ${symbol}: ${rawMarginType}`);
+    }
+
+    const leverage = Number(row.leverage);
+    if (!Number.isInteger(leverage) || leverage < 1) {
+      throw new Error(`Invalid leverage for ${symbol}: ${row.leverage}`);
+    }
+
+    return {
+      symbol,
+      marginType: rawMarginType,
+      leverage
+    };
+  }
+
+  async setMarginType(
+    symbol: string,
+    marginType: 'ISOLATED' | 'CROSSED'
+  ): Promise<void> {
+    await this.request(
+      'POST',
+      '/fapi/v1/marginType',
+      { symbol, marginType }
+    );
+  }
+
+  async setLeverage(symbol: string, leverage: number): Promise<void> {
+    if (!Number.isInteger(leverage) || leverage < 1 || leverage > 125) {
+      throw new Error(`Invalid requested leverage: ${leverage}`);
+    }
+
+    await this.request(
+      'POST',
+      '/fapi/v1/leverage',
+      { symbol, leverage }
+    );
   }
 
   async postOrder(req: OrderRequest): Promise<OrderResponse> {

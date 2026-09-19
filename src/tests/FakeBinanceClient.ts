@@ -1,4 +1,4 @@
-import { IBinanceClient, OrderRequest, OrderResponse } from '../gateways/IBinanceClient';
+import { IBinanceClient, OrderRequest, OrderResponse, SymbolRiskConfig } from '../gateways/IBinanceClient';
 import { FakeBinanceExchange, FakeOrder } from '../tests/FakeBinanceExchange';
 
 export class FakeBinanceClient implements IBinanceClient {
@@ -56,6 +56,31 @@ export class FakeBinanceClient implements IBinanceClient {
     if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
     if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
     return this.exchange.positionAmount;
+  }
+
+  async getSymbolRiskConfig(symbol: string): Promise<SymbolRiskConfig> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+    return {
+      symbol,
+      marginType: this.exchange.marginType,
+      leverage: this.exchange.leverage
+    };
+  }
+
+  async setMarginType(
+    symbol: string,
+    marginType: 'ISOLATED' | 'CROSSED'
+  ): Promise<void> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+    this.exchange.marginType = marginType;
+  }
+
+  async setLeverage(symbol: string, leverage: number): Promise<void> {
+    if (this.exchange.simulateRestTimeout) throw new Error('Timeout');
+    if (this.exchange.simulateRest500) throw new Error('HTTP 500 Internal Server Error');
+    this.exchange.leverage = leverage;
   }
 
   async getAllOrders(symbol: string, limit: number = 1000): Promise<OrderResponse[]> {
