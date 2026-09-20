@@ -23,6 +23,7 @@ export interface LiveQuantObserverConfig {
 export interface LiveQuantObservationEvent {
   anchorTimestamp: number;
   completedTimestamp: number;
+  exactHash: string;
   outcome: VirtualGridOutcome;
   totalRecorded: number;
   pendingEpisodes: number;
@@ -108,6 +109,11 @@ export class LiveQuantObserver {
           this.config
         );
 
+        const exactHash = this.quant.getExactFeatureHash(
+          episode.priceAction,
+          episode.microstructure
+        );
+
         this.quant.recordNetObservation(
           episode.priceAction,
           episode.microstructure,
@@ -121,6 +127,7 @@ export class LiveQuantObserver {
         this.onObservation?.({
           anchorTimestamp: episode.anchorTimestamp,
           completedTimestamp: candle.timestamp,
+          exactHash,
           outcome,
           totalRecorded: this.totalRecorded,
           pendingEpisodes: this.pending.length - completed
