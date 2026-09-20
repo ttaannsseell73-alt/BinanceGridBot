@@ -109,7 +109,22 @@ GitHub CI on current canonical main (2026-09-20):
 - User-risk ordering regression: **PASS** — execution stays blocked across fill/account-update ordering gaps until a fresh absolute position state catches up.
 - External position authority regression: **PASS** — fills are persisted without double-incrementing RiskGuard.
 - Bounded GitHub SHADOW smoke workflow: **READY** and testnet-only.
-- GitHub repository testnet secrets are currently absent, so cloud SHADOW execution is intentionally skipped rather than weakening safety or failing canonical CI.
+
+## Latest long SHADOW evidence
+
+GitHub Actions `Shadow Evidence` run `35513241574` on 2026-09-20 completed **SUCCESS** against Binance Futures TESTNET in `SHADOW` mode.
+
+`npm run quant:readiness` reported:
+- source: **RUNTIME**
+- total observations: **1,350**
+- live exact observations: **18**
+- live exact states: **13**
+- executable states: **0**
+- readiness: **NOT_READY**
+
+The largest exact state has only 3 observations. No state reaches the locked minimum sample count of 10 while also satisfying the non-breakout and net-expectancy gates. Therefore no candidate is promotable.
+
+The workflow verified testnet credentials, built successfully, collected live exact-feature evidence for the bounded 5.5-hour window, ran readiness, uploaded the evidence artifact, and persisted the Quant runtime cache. No Quant threshold was lowered. Mainnet and real execution remain disabled.
 
 ## Next evidence gate
 
@@ -121,6 +136,4 @@ The remaining blocker is empirical rather than missing core plumbing:
 4. only if candidate states survive the gate, promote manually to REAL_TESTNET,
 5. then perform an extended TESTNET execution/restart/recovery run before any mainnet discussion.
 
-Cloud SHADOW smoke can run from `.github/workflows/shadow-smoke.yml` once the repository has testnet-only `BINANCE_API_KEY` and `BINANCE_API_SECRET` secrets. Their absence does not alter the trading code or promotion gate.
-
-Do not claim profitability or mainnet readiness before these steps produce evidence.
+The long SHADOW evidence workflow is now operational with testnet-only repository credentials. Do not claim profitability or mainnet readiness before the evidence gate is satisfied.
