@@ -95,7 +95,7 @@ Promotion is manual. No code automatically switches SHADOW to REAL_TESTNET.
 ## Latest deterministic proof
 
 GitHub CI on current canonical main (2026-09-20):
-- main SHA: `c727a3bbf7a53f1011005e7333c56f6e0bc7db70`
+- functional baseline SHA before this docs-only update: `c727a3bbf7a53f1011005e7333c56f6e0bc7db70`
 - TypeScript build: **PASS**
 - Test files: **25 passed**
 - Tests: **103 passed**
