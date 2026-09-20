@@ -1,0 +1,120 @@
+name: Shadow Evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/shadow-evidence.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shadow-evidence-btcusdt
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+      BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+      BINANCE_FUTURES_URL: https://testnet.binancefuture.com
+      BINANCE_FUTURES_WS_URL: wss://stream.binancefuture.com
+      SYMBOL: BTCUSDT
+      QUANT_EXECUTION_MODE: SHADOW
+      I_UNDERSTAND_LIVE: NO
+      I_UNDERSTAND_QUANT_LIVE: NO
+      MAX_LONG_EXPOSURE: "1.0"
+      MAX_SHORT_EXPOSURE: "1.0"
+      MAX_TOTAL_NOTIONAL: "100000"
+      DB_PATH: ./data/shadow-evidence.db
+      LOG_LEVEL: info
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Verify testnet credentials
+        shell: bash
+        run: |
+          if [ -z "$BINANCE_API_KEY" ] || [ -z "$BINANCE_API_SECRET" ]; then
+            echo "::error::Required Binance TESTNET repository secrets are missing."
+            exit 2
+          fi
+
+      - name: Restore accumulated Quant runtime evidence
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/quant_model_BTCUSDT.live.json
+            data/quant_model_BTCUSDT.live.json.bak
+          key: shadow-evidence-btcusdt-${{ github.run_id }}
+          restore-keys: |
+            shadow-evidence-btcusdt-
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+      - name: Collect live exact-feature evidence
+        shell: bash
+        run: |
+          mkdir -p data
+          set +e
+          timeout --signal=INT --kill-after=15s 19800s npm run start:shadow > shadow-evidence.log 2>&1
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            cat shadow-evidence.log
+            echo "::error::SHADOW evidence process exited unexpectedly with status $status"
+            exit "$status"
+          fi
+
+          grep -q "Price action warm-start complete" shadow-evidence.log
+          grep -q "Runtime polling cadence configured" shadow-evidence.log
+          grep -q "UserGateway connected" shadow-evidence.log
+
+          if grep -Eiq "Too many requests|status[^0-9]*(429|418)|IP banned" shadow-evidence.log; then
+            cat shadow-evidence.log
+            echo "::error::Rate-limit failure detected during SHADOW evidence run."
+            exit 1
+          fi
+
+      - name: Quant readiness report
+        shell: bash
+        run: |
+          npm run quant:readiness | tee quant-readiness.log
+
+      - name: Publish evidence summary
+        shell: bash
+        run: |
+          {
+            echo "## BTCUSDT SHADOW Evidence"
+            echo
+            echo '~~~'
+            cat quant-readiness.log
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload evidence artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-evidence-${{ github.run_id }}
+          path: |
+            shadow-evidence.log
+            quant-readiness.log
+            data/quant_model_BTCUSDT.live.json
+            data/quant_model_BTCUSDT.live.json.bak
+          if-no-files-found: warn
+          retention-days: 14
