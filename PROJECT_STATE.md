@@ -13,6 +13,8 @@
 - Deterministic execution and risk controls own the money path.
 - Binance Futures symbol configuration is verified as **ISOLATED / 2x** before strategy activity.
 - Reconciliation is bounded and fail-closed.
+- Idle reconciliation skips weighted order-history polling when there are no local open intents.
+- Binance REST request weight is tracked; 429/418 responses trigger backoff. Automatic retries are GET-only so order/cancel writes are never blindly duplicated.
 - Grid episodes remain stable between explicit recenter events.
 - Price-action breakout blocks new grid exposure.
 - Default Quant mode is **SHADOW**.
@@ -83,10 +85,12 @@ Promotion is manual. No code automatically switches SHADOW to REAL_TESTNET.
 
 ## Latest deterministic proof
 
-GitHub CI after Quant runtime-store hardening:
-- TypeScript build: PASS
-- Test files: **23 passed**
-- Tests: **95 passed**
+GitHub CI after REST hardening + breakout regression lock (2026-09-20):
+- TypeScript build: **PASS**
+- Test files: **25 passed**
+- Tests: **103 passed**
+- Breakout re-entry regression: **PASS** — breakout flags clear after a candle closes back inside the remembered range; the observed live breakout state is not a sticky-state bug.
+- Idle reconciliation regression: **PASS** — `getAllOrders` is skipped when there are no local open intents.
 
 ## Next evidence gate
 
