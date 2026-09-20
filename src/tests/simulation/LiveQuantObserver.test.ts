@@ -61,6 +61,11 @@ describe('LiveQuantObserver', () => {
     expect(score.modelSource).toBe('EXACT');
     expect(score.sampleCount).toBeGreaterThanOrEqual(1);
     expect(onObservation).toHaveBeenCalledTimes(1);
+
+    const event = onObservation.mock.calls[0][0];
+    expect(event.exactHash).toBe(score.featureHash);
+    expect(event.exactHash).not.toContain('UNAVAILABLE');
+
     expect(observer.getStats().totalRecorded).toBe(1);
   });
 
