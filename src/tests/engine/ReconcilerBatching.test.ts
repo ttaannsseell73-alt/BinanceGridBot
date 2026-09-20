@@ -54,4 +54,34 @@ describe('Reconciler bounded REST usage', () => {
 
     journal.close();
   });
+  it('skips allOrders history when there are no local open intents', async () => {
+    const exchange = new FakeBinanceExchange();
+    const client = new FakeBinanceClient(exchange);
+    const journal = new IntentJournal(':memory:');
+    const reconciler = new Reconciler(client, journal, 'BTCUSDT');
+
+    let openOrdersCalls = 0;
+    let allOrdersCalls = 0;
+
+    const originalGetOpenOrders = client.getOpenOrders.bind(client);
+    client.getOpenOrders = async (...args) => {
+      openOrdersCalls++;
+      return originalGetOpenOrders(...args);
+    };
+
+    const originalGetAllOrders = client.getAllOrders.bind(client);
+    client.getAllOrders = async (...args) => {
+      allOrdersCalls++;
+      return originalGetAllOrders(...args);
+    };
+
+    const ok = await reconciler.reconcile();
+
+    expect(ok).toBe(true);
+    expect(openOrdersCalls).toBe(1);
+    expect(allOrdersCalls).toBe(0);
+    expect(reconciler.isHalted).toBe(false);
+
+    journal.close();
+  });
 });
