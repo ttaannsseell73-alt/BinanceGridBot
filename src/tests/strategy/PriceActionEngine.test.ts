@@ -69,6 +69,34 @@ describe('PriceActionEngine', () => {
     expect(lastFeatures?.breakoutDown).toBe(false); // didn't close below
   });
 
+  it('clears a breakout when price closes back inside the remembered range', () => {
+    const engine = new PriceActionEngine(1);
+
+    const candles = [
+      createCandle(100, 90, 95, 1000),
+      createCandle(150, 110, 115, 2000),
+      createCandle(100, 80, 85, 3000),
+      createCandle(149, 110, 115, 4000),
+      createCandle(100, 80, 85, 5000),
+      createCandle(120, 100, 110, 6000),
+    ];
+
+    let features;
+    for (const candle of candles) {
+      features = engine.processCandle(candle);
+    }
+
+    expect(features?.inRange).toBe(true);
+
+    features = engine.processCandle(createCandle(160, 150, 155, 7000));
+    expect(features.breakoutUp).toBe(true);
+
+    // Breakout flags are per-candle observations, not sticky state.
+    features = engine.processCandle(createCandle(145, 100, 120, 8000));
+    expect(features.breakoutUp).toBe(false);
+    expect(features.breakoutDown).toBe(false);
+  });
+
   it('should detect market structure', () => {
     const engine = new PriceActionEngine(1);
     const candles = [
