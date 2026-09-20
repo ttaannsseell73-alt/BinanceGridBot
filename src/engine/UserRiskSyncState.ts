@@ -22,6 +22,10 @@ export class UserRiskSyncState {
     this.synchronized = false;
   }
 
+  public invalidate(): void {
+    this.synchronized = false;
+  }
+
   public onPositionMutation(eventTime: number): void {
     const safeTime = this.normalizeTime(eventTime);
     this.latestMutationTime = Math.max(this.latestMutationTime, safeTime);
