@@ -44,6 +44,7 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
             this.emit('account_update', payload);
           } else if (payload.e === 'listenKeyExpired') {
             logger.warn('listenKey expired, reconnecting UserGateway...');
+            this.emitDisconnectedIfNeeded();
             this.reconnect();
           }
         } catch (err) {
@@ -56,10 +57,8 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
       });
 
       this.ws.on('close', () => {
-        const wasConnected = this.connected;
-        this.connected = false;
         logger.warn('UserGateway closed. Reconnecting...');
-        if (wasConnected) this.emit('disconnected');
+        this.emitDisconnectedIfNeeded();
         this.reconnect();
       });
 
@@ -81,6 +80,12 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  private emitDisconnectedIfNeeded(): void {
+    const wasConnected = this.connected;
+    this.connected = false;
+    if (wasConnected) this.emit('disconnected');
   }
 
   private reconnect() {
