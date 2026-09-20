@@ -28,6 +28,12 @@ import { QuantModelStore } from './simulation/QuantModelStore';
 import { analyzeQuantReadiness } from './simulation/QuantReadiness';
 import { sanitizeShadowStartup } from './engine/ShadowStartupCleanup';
 import { getRuntimePollingIntervals } from './config/RuntimePollingPolicy';
+import {
+  extractOneWayPositionAmount,
+  getUserEventTime,
+  isTradeFillUpdate
+} from './engine/UserPositionSync';
+import { UserRiskSyncState } from './engine/UserRiskSyncState';
 
 export class App {
   private journal: IntentJournal;
@@ -59,6 +65,7 @@ export class App {
   private openInterestTracker = new OpenInterestTracker();
   private currentOiDelta: OiDelta = 'UNAVAILABLE_DUE_TO_DATA';
   private emergencyExitInProgress = false;
+  private userRiskSyncState = new UserRiskSyncState();
   private emergencyRiskEngine = new EmergencyRiskEngine({
     maxAdverseMovePct: 0.03,
     minLiquidationDistancePct: 0.05,
@@ -119,7 +126,9 @@ export class App {
       config.BINANCE_API_KEY
     );
     this.executionEngine = new ExecutionEngine(this.restClient, this.journal);
-    this.orderTracker = new OrderTracker(this.journal, this.riskGuard);
+    // RiskGuard inventory is authoritative absolute Binance account state.
+    // OrderTracker journals fills but never adds them on top of ACCOUNT_UPDATE.
+    this.orderTracker = new OrderTracker(this.journal, this.riskGuard, false);
     this.reconciler = new Reconciler(this.restClient, this.journal, config.SYMBOL);
     
     // Very simple grid config
@@ -333,8 +342,49 @@ export class App {
       }
     });
 
+    this.userGateway.on('connected', () => {
+      this.userRiskSyncState.onConnected();
+      void this.refreshPositionRisk('user-stream-connected');
+    });
+
+    this.userGateway.on('disconnected', () => {
+      this.userRiskSyncState.onDisconnected();
+      void this.cancelRestingGridOrders('user-stream-disconnected');
+    });
+
+    this.userGateway.on('account_update', (payload) => {
+      this.watchdog.pingUser();
+
+      try {
+        const positionAmount = extractOneWayPositionAmount(
+          payload,
+          config.SYMBOL
+        );
+
+        if (positionAmount === null) return;
+
+        this.riskGuard.syncPosition(positionAmount);
+        this.userRiskSyncState.onAbsolutePosition(getUserEventTime(payload));
+
+        logger.debug({
+          symbol: config.SYMBOL,
+          positionAmount,
+          userRiskSync: this.userRiskSyncState.getState()
+        }, 'Risk position synchronized from ACCOUNT_UPDATE');
+      } catch (err) {
+        this.userRiskSyncState.invalidate();
+        logger.error({ err }, 'Invalid ACCOUNT_UPDATE position state');
+        void this.cancelRestingGridOrders('invalid-account-update');
+      }
+    });
+
     this.userGateway.on('order_trade_update', (payload) => {
       this.watchdog.pingUser();
+
+      if (isTradeFillUpdate(payload)) {
+        this.userRiskSyncState.onPositionMutation(getUserEventTime(payload));
+      }
+
       this.orderTracker.handleTradeUpdate(payload);
     });
 
@@ -483,12 +533,20 @@ export class App {
     await this.recordCriticalOperation(ok, 'reconciliation');
   }
 
-  private async refreshPositionRisk(): Promise<void> {
+  private async refreshPositionRisk(
+    context: string = 'position-risk'
+  ): Promise<void> {
     if (this.emergencyExitInProgress) return;
+
+    const requestStartedAt = Date.now();
 
     try {
       const snapshot = await this.restClient.getPositionRisk(config.SYMBOL);
       this.riskGuard.syncPosition(snapshot.positionAmt);
+      this.userRiskSyncState.onRestSnapshot(
+        requestStartedAt,
+        Date.now()
+      );
 
       if (
         Math.abs(snapshot.positionAmt) >= 1e-12 &&
@@ -506,11 +564,40 @@ export class App {
         return;
       }
 
-      await this.recordCriticalOperation(true, 'position-risk');
+      await this.recordCriticalOperation(true, context);
     } catch (err) {
-      logger.error({ err }, 'Position risk refresh failed');
-      await this.recordCriticalOperation(false, 'position-risk');
+      this.userRiskSyncState.invalidate();
+      logger.error({ err, context }, 'Position risk refresh failed');
+      await this.recordCriticalOperation(false, context);
     }
+  }
+
+  private async cancelRestingGridOrders(reason: string): Promise<void> {
+    if (this.emergencyExitInProgress) return;
+
+    const openIntents = this.journal.getOpenIntents();
+    let cancelRequests = 0;
+
+    for (const open of openIntents) {
+      if (
+        open.state !== LifecycleState.ACKNOWLEDGED &&
+        open.state !== LifecycleState.PARTIALLY_FILLED
+      ) {
+        continue;
+      }
+
+      const cancelOk = await this.executionEngine.cancelOrder(open);
+      cancelRequests += 1;
+      await this.recordCriticalOperation(cancelOk, 'user-stream-cancel');
+
+      if (this.emergencyExitInProgress) return;
+    }
+
+    logger.warn({
+      reason,
+      openIntents: openIntents.length,
+      cancelRequests
+    }, 'Resting grid orders canceled/queued after user-risk desynchronization');
   }
 
   private async recordCriticalOperation(
@@ -609,6 +696,14 @@ export class App {
 
   private async runStrategyCycle() {
     if (this.reconciler.isHalted || this.emergencyExitInProgress) return;
+
+    if (!this.userRiskSyncState.isReady()) {
+      logger.debug({
+        userStreamConnected: this.userGateway.isConnected(),
+        userRiskSync: this.userRiskSyncState.getState()
+      }, 'Strategy paused until user stream and absolute position are synchronized');
+      return;
+    }
 
     const currentPrice = this.marketGateway.getCurrentPrice();
     if (currentPrice === 0) return; // Wait for market data

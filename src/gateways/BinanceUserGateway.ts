@@ -12,6 +12,7 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
   private ws: WebSocket | null = null;
   private listenKey: string = '';
   private keepAliveInterval: NodeJS.Timeout | null = null;
+  private connected = false;
 
   constructor(
     private restUrl: string,
@@ -28,7 +29,9 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
       this.ws = new WebSocket(url);
 
       this.ws.on('open', () => {
+        this.connected = true;
         logger.info('UserGateway connected');
+        this.emit('connected');
         this.startKeepAlive();
       });
 
@@ -37,8 +40,11 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
           const payload = JSON.parse(data.toString());
           if (payload.e === 'ORDER_TRADE_UPDATE') {
             this.emit('order_trade_update', payload);
+          } else if (payload.e === 'ACCOUNT_UPDATE') {
+            this.emit('account_update', payload);
           } else if (payload.e === 'listenKeyExpired') {
             logger.warn('listenKey expired, reconnecting UserGateway...');
+            this.emitDisconnectedIfNeeded();
             this.reconnect();
           }
         } catch (err) {
@@ -52,6 +58,7 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
 
       this.ws.on('close', () => {
         logger.warn('UserGateway closed. Reconnecting...');
+        this.emitDisconnectedIfNeeded();
         this.reconnect();
       });
 
@@ -61,13 +68,24 @@ export class BinanceUserGateway extends EventEmitter implements IUserGateway {
     }
   }
 
+  public isConnected(): boolean {
+    return this.connected;
+  }
+
   public disconnect() {
+    this.connected = false;
     if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
     if (this.ws) {
       this.ws.removeAllListeners();
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  private emitDisconnectedIfNeeded(): void {
+    const wasConnected = this.connected;
+    this.connected = false;
+    if (wasConnected) this.emit('disconnected');
   }
 
   private reconnect() {

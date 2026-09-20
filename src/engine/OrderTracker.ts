@@ -6,7 +6,8 @@ import { logger } from '../utils/logger';
 export class OrderTracker {
   constructor(
     private journal: IntentJournal,
-    private riskGuard: RiskGuard
+    private riskGuard: RiskGuard,
+    private updateRiskFromFills: boolean = true
   ) {}
 
   public handleTradeUpdate(payload: any) {
@@ -78,9 +79,15 @@ export class OrderTracker {
       const processed = this.journal.processFill(fill, remainingQty, cumQty, newState);
       
       if (processed) {
-        // Update RiskGuard position
-        this.riskGuard.updatePositionFromFill(intent.side, lastFilledQty);
-        logger.info({ fill, newState }, 'Processed fill and updated position');
+        if (this.updateRiskFromFills) {
+          this.riskGuard.updatePositionFromFill(intent.side, lastFilledQty);
+          logger.info({ fill, newState }, 'Processed fill and updated position');
+        } else {
+          logger.info(
+            { fill, newState },
+            'Processed fill; position is managed by absolute account state'
+          );
+        }
       } else {
         logger.warn({ fill }, 'Ignored duplicate fill');
       }
