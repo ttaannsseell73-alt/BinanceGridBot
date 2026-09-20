@@ -1,0 +1,86 @@
+name: Shadow Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/shadow-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  shadow-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+      BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+      BINANCE_FUTURES_URL: https://testnet.binancefuture.com
+      BINANCE_FUTURES_WS_URL: wss://stream.binancefuture.com
+      SYMBOL: BTCUSDT
+      QUANT_EXECUTION_MODE: SHADOW
+      I_UNDERSTAND_LIVE: NO
+      I_UNDERSTAND_QUANT_LIVE: NO
+      MAX_LONG_EXPOSURE: "1.0"
+      MAX_SHORT_EXPOSURE: "1.0"
+      MAX_TOTAL_NOTIONAL: "100000"
+      DB_PATH: ./data/shadow-smoke.db
+      LOG_LEVEL: info
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Verify testnet credentials are configured
+        shell: bash
+        run: |
+          if [ -z "$BINANCE_API_KEY" ] || [ -z "$BINANCE_API_SECRET" ]; then
+            echo "::error::BINANCE_API_KEY / BINANCE_API_SECRET repository secrets are not configured."
+            exit 2
+          fi
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+      - name: Run bounded SHADOW startup smoke
+        shell: bash
+        run: |
+          mkdir -p data
+          set +e
+          timeout --signal=INT --kill-after=10s 150s npm run start:shadow > shadow-smoke.log 2>&1
+          status=$?
+          set -e
+
+          cat shadow-smoke.log
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            echo "::error::SHADOW process exited unexpectedly with status $status"
+            exit "$status"
+          fi
+
+          grep -q "Price action warm-start complete" shadow-smoke.log
+          grep -q "Runtime polling cadence configured" shadow-smoke.log
+          grep -q "UserGateway connected" shadow-smoke.log
+
+          if grep -Eiq "Too many requests|status[^0-9]*(429|418)|IP banned" shadow-smoke.log; then
+            echo "::error::Rate-limit failure detected during SHADOW smoke."
+            exit 1
+          fi
+
+      - name: Upload SHADOW smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-smoke-log
+          path: shadow-smoke.log
+          if-no-files-found: warn
+          retention-days: 7
