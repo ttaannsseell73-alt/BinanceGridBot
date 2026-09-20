@@ -105,6 +105,13 @@ export class QuantEngine {
     return this.observations.length;
   }
 
+  public getExactFeatureHash(
+    pa: PriceActionFeatures,
+    ms: MicrostructureFeatures
+  ): string {
+    return this.hashFeatures(pa, ms);
+  }
+
   public exportModel(): QuantModelV2 {
     return {
       version: 2,
