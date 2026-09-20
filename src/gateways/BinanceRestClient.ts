@@ -208,7 +208,7 @@ export class BinanceRestClient implements IBinanceClient {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       await this.waitForRestWindow();
 
-      const requestParams = { ...params, timestamp: Date.now(), recvWindow: 5000 };
+      const requestParams: Record<string, any> = { ...params, timestamp: Date.now(), recvWindow: 5000 };
       const queryString = Object.keys(requestParams)
         .map(key => `${key}=${encodeURIComponent(requestParams[key])}`)
         .join('&');
