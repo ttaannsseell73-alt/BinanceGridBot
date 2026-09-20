@@ -26,6 +26,11 @@
 - Mainnet requires explicit live acknowledgement.
 - Real-live Quant requires a second explicit Quant acknowledgement.
 - Startup synchronizes the real exchange position into RiskGuard.
+- Binance `ACCOUNT_UPDATE` is the live absolute inventory authority after the user stream connects.
+- Strategy execution is fail-closed until the user stream is connected and absolute position state is synchronized.
+- A fill newer than the last absolute position snapshot immediately closes the execution gate until `ACCOUNT_UPDATE` or a sufficiently new REST position snapshot catches up.
+- User-stream disconnect/listen-key expiry invalidates risk synchronization and queues cancellation of resting grid orders.
+- Order fills are journaled without additively mutating RiskGuard, preventing ACCOUNT_UPDATE + fill double counting.
 - Emergency kill switch triggers on:
   - 3% adverse move against open inventory,
   - liquidation distance at or below 5%,
@@ -95,12 +100,14 @@ Promotion is manual. No code automatically switches SHADOW to REAL_TESTNET.
 ## Latest deterministic proof
 
 GitHub CI on current canonical main (2026-09-20):
-- functional baseline SHA before this docs-only update: `c727a3bbf7a53f1011005e7333c56f6e0bc7db70`
+- functional baseline SHA before this docs-only update: `2feabd6870391f980f291e8a2debc6461d123be8`
 - TypeScript build: **PASS**
-- Test files: **25 passed**
-- Tests: **103 passed**
+- Test files: **28 passed**
+- Tests: **112 passed**
 - Breakout re-entry regression: **PASS** — breakout flags clear after a candle closes back inside the remembered range; the observed live breakout state is not a sticky-state bug.
 - Idle reconciliation regression: **PASS** — `getAllOrders` is skipped when there are no local open intents.
+- User-risk ordering regression: **PASS** — execution stays blocked across fill/account-update ordering gaps until a fresh absolute position state catches up.
+- External position authority regression: **PASS** — fills are persisted without double-incrementing RiskGuard.
 - Bounded GitHub SHADOW smoke workflow: **READY** and testnet-only.
 - GitHub repository testnet secrets are currently absent, so cloud SHADOW execution is intentionally skipped rather than weakening safety or failing canonical CI.
 
