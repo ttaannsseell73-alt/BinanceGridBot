@@ -25,6 +25,7 @@ import { executeEmergencyExit } from './engine/EmergencyExitEngine';
 import { assertQuantExecutionModeSafe, resolveQuantExecution } from './strategy/QuantExecutionPolicy';
 import { LiveQuantObserver, LiveQuantObservationEvent } from './simulation/LiveQuantObserver';
 import { QuantModelStore } from './simulation/QuantModelStore';
+import { analyzeQuantReadiness } from './simulation/QuantReadiness';
 import { sanitizeShadowStartup } from './engine/ShadowStartupCleanup';
 import { getRuntimePollingIntervals } from './config/RuntimePollingPolicy';
 
@@ -202,16 +203,32 @@ export class App {
 
     try {
       this.persistRuntimeQuantModel();
+
+      const readiness = analyzeQuantReadiness(
+        this.quantEngine.exportModel(),
+        {
+          minSamples: 10,
+          minExpectancy: 0.001,
+          rawRoundTripPenalty: (0.0004 * 2) + (0.0001 * 2)
+        }
+      );
+
       logger.info({
         symbol: config.SYMBOL,
         anchorTimestamp: event.anchorTimestamp,
         completedTimestamp: event.completedTimestamp,
+        exactHash: event.exactHash,
         netReturn: event.outcome.netReturn,
         filledOrders: event.outcome.filledOrders,
         terminalPosition: event.outcome.terminalPosition,
         totalLiveRecorded: event.totalRecorded,
         pendingEpisodes: event.pendingEpisodes,
         totalModelObservations: this.quantEngine.getObservationCount(),
+        liveExactObservations: readiness.liveExactObservations,
+        liveExactStates: readiness.liveExactStates,
+        executableStates: readiness.executableStates,
+        readiness:
+          readiness.executableStates > 0 ? 'CANDIDATE_FOUND' : 'NOT_READY',
         runtimeModelPath: this.quantRuntimeModelPath
       }, 'Live Quant observation recorded');
     } catch (err) {
