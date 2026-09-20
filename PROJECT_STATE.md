@@ -61,6 +61,15 @@ SHADOW mode now passively collects mature live:
 
 A snapshot is opened every 15 closed 1m candles and labeled after a 60-candle forward horizon using the same virtual-grid outcome model as historical training.
 
+Each matured live observation now logs:
+- its full exact feature hash,
+- live exact-observation count,
+- live exact-state count,
+- executable-state count,
+- current readiness (`NOT_READY` / `CANDIDATE_FOUND`).
+
+This is observability only. It does not auto-promote execution mode.
+
 Runtime model:
 `data/quant_model_<SYMBOL>.live.json`
 
@@ -85,21 +94,26 @@ Promotion is manual. No code automatically switches SHADOW to REAL_TESTNET.
 
 ## Latest deterministic proof
 
-GitHub CI after REST hardening + breakout regression lock (2026-09-20):
+GitHub CI on current canonical main (2026-09-20):
+- main SHA: `c727a3bbf7a53f1011005e7333c56f6e0bc7db70`
 - TypeScript build: **PASS**
 - Test files: **25 passed**
 - Tests: **103 passed**
 - Breakout re-entry regression: **PASS** — breakout flags clear after a candle closes back inside the remembered range; the observed live breakout state is not a sticky-state bug.
 - Idle reconciliation regression: **PASS** — `getAllOrders` is skipped when there are no local open intents.
+- Bounded GitHub SHADOW smoke workflow: **READY** and testnet-only.
+- GitHub repository testnet secrets are currently absent, so cloud SHADOW execution is intentionally skipped rather than weakening safety or failing canonical CI.
 
 ## Next evidence gate
 
 The remaining blocker is empirical rather than missing core plumbing:
 
-1. run the current `main` on Binance Futures TESTNET in SHADOW,
-2. accumulate live exact-feature observations,
-3. audit with `npm run quant:readiness`,
-4. only if candidate states survive the gate, promote to REAL_TESTNET,
+1. continue the current `main` on Binance Futures TESTNET in SHADOW,
+2. accumulate enough real live exact-feature observations for at least one state to reach the locked sample gate,
+3. use the automatic runtime readiness fields and `npm run quant:readiness` as independent checks,
+4. only if candidate states survive the gate, promote manually to REAL_TESTNET,
 5. then perform an extended TESTNET execution/restart/recovery run before any mainnet discussion.
+
+Cloud SHADOW smoke can run from `.github/workflows/shadow-smoke.yml` once the repository has testnet-only `BINANCE_API_KEY` and `BINANCE_API_SECRET` secrets. Their absence does not alter the trading code or promotion gate.
 
 Do not claim profitability or mainnet readiness before these steps produce evidence.
