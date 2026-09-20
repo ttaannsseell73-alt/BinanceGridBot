@@ -23,10 +23,17 @@ export class Reconciler {
 
     try {
       // Bounded reconciliation: never N x getOrder() for N stale local intents.
+      // Always inspect current exchange open orders for ownership safety.
+      // Only fetch order history when there is actually a local non-terminal intent
+      // that may need historical resolution. This removes an unnecessary weighted
+      // /allOrders request from idle reconciliation cycles.
       const openOrders = await this.client.getOpenOrders(this.symbol);
-      const recentOrders = await this.client.getAllOrders(this.symbol, 1000);
-
+      // Read local intents after the exchange snapshot so an intent created while
+      // awaiting Binance is not falsely classified as a foreign exchange order.
       const openIntents = this.journal.getOpenIntents();
+      const recentOrders = openIntents.length > 0
+        ? await this.client.getAllOrders(this.symbol, 1000)
+        : [];
       const exchangeOpenMap = new Map(openOrders.map(o => [o.clientOrderId, o]));
       const exchangeHistoryMap = new Map(recentOrders.map(o => [o.clientOrderId, o]));
       const intentMap = new Map(openIntents.map(i => [i.clientOrderId, i]));

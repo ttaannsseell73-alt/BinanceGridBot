@@ -22,6 +22,82 @@ export class BinanceRestClient implements IBinanceClient {
     qtyDecimals: number;
   }>();
 
+  // Binance request-weight protection. Automatic retries are GET-only to avoid
+  // duplicate trading actions on order/cancel endpoints.
+  private restBlockedUntil = 0;
+  private lastUsedWeight1m: number | null = null;
+  private readonly requestWeightSoftLimit1m = 5400;
+  private readonly maxSafeGetRetries = 2;
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private headerNumber(headers: any, name: string): number | null {
+    const raw =
+      headers?.get?.(name) ??
+      headers?.[name] ??
+      headers?.[name.toLowerCase()] ??
+      headers?.[name.toUpperCase()];
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  private updateRateLimitState(headers: any): void {
+    const usedWeight1m = this.headerNumber(headers, 'x-mbx-used-weight-1m');
+    if (usedWeight1m === null) return;
+
+    this.lastUsedWeight1m = usedWeight1m;
+    if (usedWeight1m >= this.requestWeightSoftLimit1m) {
+      logger.warn({ usedWeight1m }, 'Binance REST request weight approaching IP limit');
+    } else {
+      logger.debug({ usedWeight1m }, 'Binance REST request weight updated');
+    }
+  }
+
+  private getRetryAfterMs(error: any, attempt: number): number {
+    const retryAfterSeconds = this.headerNumber(error?.response?.headers, 'retry-after');
+    if (retryAfterSeconds !== null && retryAfterSeconds > 0) {
+      return Math.ceil(retryAfterSeconds * 1000);
+    }
+    return Math.min(60_000, 2_000 * (2 ** attempt));
+  }
+
+  private async waitForRestWindow(): Promise<void> {
+    const waitMs = this.restBlockedUntil - Date.now();
+    if (waitMs <= 0) return;
+    logger.warn({ waitMs }, 'Binance REST backoff active; delaying request');
+    await this.sleep(waitMs);
+  }
+
+  private async publicGet<T>(endpoint: string, params: Record<string, any>): Promise<T> {
+    const maxAttempts = this.maxSafeGetRetries + 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await this.waitForRestWindow();
+      try {
+        const response = await axios.get(`${this.restUrl}${endpoint}`, { params });
+        this.updateRateLimitState(response.headers);
+        return response.data;
+      } catch (error: any) {
+        this.updateRateLimitState(error?.response?.headers);
+        const status = Number(error?.response?.status);
+        const msg = error?.response?.data?.msg || error.message;
+
+        if ((status === 429 || status === 418) && attempt < maxAttempts - 1) {
+          const waitMs = this.getRetryAfterMs(error, attempt);
+          this.restBlockedUntil = Math.max(this.restBlockedUntil, Date.now() + waitMs);
+          logger.warn({ endpoint, status, waitMs, msg }, 'Binance public REST throttled; backing off');
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new Error(`Binance public GET exhausted safe retries for ${endpoint}`);
+  }
+
   private decimalsFromFilter(value: string): number {
     const trimmed = value.replace(/0+$/, '').replace(/\.$/, '');
     const dot = trimmed.indexOf('.');
@@ -32,8 +108,8 @@ export class BinanceRestClient implements IBinanceClient {
     const cached = this.symbolRules.get(symbol);
     if (cached) return cached;
 
-    const response = await axios.get(`${this.restUrl}/fapi/v1/exchangeInfo`);
-    const symbolInfo = response.data.symbols?.find((s: any) => s.symbol === symbol);
+    const data: any = await this.publicGet('/fapi/v1/exchangeInfo', {});
+    const symbolInfo = data.symbols?.find((s: any) => s.symbol === symbol);
 
     if (!symbolInfo) {
       throw new Error(`Binance symbol not found: ${symbol}`);
@@ -127,30 +203,58 @@ export class BinanceRestClient implements IBinanceClient {
   }
 
   private async request<T>(method: 'GET' | 'POST' | 'DELETE', endpoint: string, params: Record<string, any>): Promise<T> {
-    params.timestamp = Date.now();
-    params.recvWindow = 5000;
+    const maxAttempts = method === 'GET' ? this.maxSafeGetRetries + 1 : 1;
 
-    const queryString = Object.keys(params)
-      .map(key => `${key}=${encodeURIComponent(params[key])}`)
-      .join('&');
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await this.waitForRestWindow();
 
-    const signature = this.sign(queryString);
-    const finalUrl = `${this.restUrl}${endpoint}?${queryString}&signature=${signature}`;
+      const requestParams: Record<string, any> = { ...params, timestamp: Date.now(), recvWindow: 5000 };
+      const queryString = Object.keys(requestParams)
+        .map(key => `${key}=${encodeURIComponent(requestParams[key])}`)
+        .join('&');
 
-    try {
-      const response = await axios({
-        method,
-        url: finalUrl,
-        headers: {
-          'X-MBX-APIKEY': this.apiKey,
-        },
-      });
-      return response.data;
-    } catch (error: any) {
-      const msg = error.response?.data?.msg || error.message;
-      logger.error({ endpoint, msg }, 'Binance REST API error');
-      throw new Error(`Binance API Error: ${msg}`);
+      const signature = this.sign(queryString);
+      const finalUrl = `${this.restUrl}${endpoint}?${queryString}&signature=${signature}`;
+
+      try {
+        const response = await axios({
+          method,
+          url: finalUrl,
+          headers: {
+            'X-MBX-APIKEY': this.apiKey,
+          },
+        });
+        this.updateRateLimitState(response.headers);
+        return response.data;
+      } catch (error: any) {
+        this.updateRateLimitState(error?.response?.headers);
+
+        const status = Number(error?.response?.status);
+        const msg = error.response?.data?.msg || error.message;
+
+        if (
+          method === 'GET' &&
+          (status === 429 || status === 418) &&
+          attempt < maxAttempts - 1
+        ) {
+          const waitMs = this.getRetryAfterMs(error, attempt);
+          this.restBlockedUntil = Math.max(this.restBlockedUntil, Date.now() + waitMs);
+          logger.warn(
+            { endpoint, method, status, waitMs, usedWeight1m: this.lastUsedWeight1m, msg },
+            'Binance signed REST throttled; backing off'
+          );
+          continue;
+        }
+
+        logger.error(
+          { endpoint, method, status, usedWeight1m: this.lastUsedWeight1m, msg },
+          'Binance REST API error'
+        );
+        throw new Error(`Binance API Error: ${msg}`);
+      }
     }
+
+    throw new Error(`Binance API Error: exhausted safe GET retries for ${endpoint}`);
   }
 
   async getRecentKlines(
@@ -161,12 +265,14 @@ export class BinanceRestClient implements IBinanceClient {
     const safeLimit = Math.max(1, Math.min(1500, Math.floor(limit)));
 
     try {
-      const response = await axios.get(`${this.restUrl}/fapi/v1/klines`, {
-        params: { symbol, interval, limit: safeLimit }
+      const data: any = await this.publicGet('/fapi/v1/klines', {
+        symbol,
+        interval,
+        limit: safeLimit
       });
 
       const now = Date.now();
-      const rows: any[] = Array.isArray(response.data) ? response.data : [];
+      const rows: any[] = Array.isArray(data) ? data : [];
 
       return rows
         .filter(k => Array.isArray(k) && Number(k[6]) < now)
@@ -197,12 +303,10 @@ export class BinanceRestClient implements IBinanceClient {
 
   async getOpenInterest(symbol: string): Promise<{ openInterest: number; time: number }> {
     try {
-      const response = await axios.get(`${this.restUrl}/fapi/v1/openInterest`, {
-        params: { symbol }
-      });
+      const data: any = await this.publicGet('/fapi/v1/openInterest', { symbol });
 
-      const openInterest = Number(response.data?.openInterest);
-      const time = Number(response.data?.time ?? Date.now());
+      const openInterest = Number(data?.openInterest);
+      const time = Number(data?.time ?? Date.now());
 
       if (!Number.isFinite(openInterest) || openInterest <= 0) {
         throw new Error(`Invalid open interest for ${symbol}`);
