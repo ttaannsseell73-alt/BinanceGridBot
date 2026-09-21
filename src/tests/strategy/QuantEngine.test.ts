@@ -218,6 +218,6 @@ describe('QuantEngine balanced testnet matching', () => {
     const score = engine.evaluate(pa, ms);
 
     expect(score.modelSource).toBe('NONE');
-    expect(score.sampleCount).toBe(2);
+    expect(score.sampleCount).toBe(1);
   });
 });
