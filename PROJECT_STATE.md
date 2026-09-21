@@ -31,6 +31,7 @@
 - A fill newer than the last absolute position snapshot immediately closes the execution gate until `ACCOUNT_UPDATE` or a sufficiently new REST position snapshot catches up.
 - User-stream disconnect/listen-key expiry invalidates risk synchronization and queues cancellation of resting grid orders.
 - Order fills are journaled without additively mutating RiskGuard, preventing ACCOUNT_UPDATE + fill double counting.
+- TESTNET startup may normalize Hedge Mode to **ONE_WAY** and must verify the change before continuing; REAL_LIVE never auto-changes account position mode.
 - Emergency kill switch triggers on:
   - 3% adverse move against open inventory,
   - liquidation distance at or below 5%,
@@ -110,49 +111,48 @@ Promotion remains manual. No code automatically switches SHADOW to REAL_TESTNET 
 
 ## Latest deterministic proof
 
-GitHub CI on current canonical main (2026-09-21):
+GitHub CI on canonical main (2026-09-21):
 - balanced TESTNET profile implementation SHA: `ad5bec6a94bfa77a9c0082537af97423e6a40220`
-- TypeScript build: **PASS**
-- Test files: **30 passed**
-- Tests: **123 passed**
+- TESTNET ONE_WAY bootstrap SHA: `75c5edf4ea9d793418bcdba39b01ddf6f8c66ecf`
+- CI run `35587463050`: **PASS**
 - Breakout re-entry regression: **PASS** — breakout flags clear after a candle closes back inside the remembered range; the observed live breakout state is not a sticky-state bug.
 - Idle reconciliation regression: **PASS** — `getAllOrders` is skipped when there are no local open intents.
 - User-risk ordering regression: **PASS** — execution stays blocked across fill/account-update ordering gaps until a fresh absolute position state catches up.
 - External position authority regression: **PASS** — fills are persisted without double-incrementing RiskGuard.
-- Bounded GitHub SHADOW smoke workflow: **READY** and testnet-only.
+- Bounded GitHub SHADOW evidence workflow: **OPERATIONAL**, testnet-only.
 
 ## Latest long SHADOW evidence
 
-GitHub Actions `Shadow Evidence` run `35513241574` on 2026-09-20 completed **SUCCESS** against Binance Futures TESTNET in `SHADOW` mode.
+GitHub Actions `Shadow Evidence` run `35587463053` on 2026-09-21 completed **SUCCESS** against Binance Futures TESTNET in `SHADOW` mode using **BALANCED_TESTNET**.
 
 `npm run quant:readiness` reported:
 - source: **RUNTIME**
-- total observations: **1,350**
-- live exact observations: **18**
-- live exact states: **13**
+- total observations: **1,368**
+- live exact observations: **36**
+- balanced live states: **9**
 - executable states: **0**
 - readiness: **NOT_READY**
 
-The original strict exact-state report had a maximum of 3 observations per exact state.
+Current BALANCED_TESTNET buckets:
+- `RANGE / SELL / OI_BUILDING / BREAKOUT`: 7 samples, expectancy **-0.000498** — breakout blocked and negative edge.
+- `RANGE / SELL / OI_BUILDING / NON_BREAKOUT`: 7 samples, expectancy **-0.002560** — sample gate passed, expectancy failed.
+- `RANGE / BUY / OI_BUILDING / NON_BREAKOUT`: 7 samples, expectancy **-0.002574** — sample gate passed, expectancy failed.
+- `RANGE / BUY / OI_BUILDING / BREAKOUT`: 5 samples, expectancy **+0.000827** — positive expectancy but breakout blocked and sample count below 6.
+- Remaining states have 1–3 samples and are not executable; positive-expectancy examples are breakout states or below the sample gate.
 
-The same 18 live observations were recalculated under the new BALANCED_TESTNET grouping:
-- breakout / SELL / OI-building: 7 samples, expectancy -0.000498 — blocked by breakout and negative edge,
-- breakout / BUY / OI-building: 5 samples, expectancy +0.000827 — blocked by breakout,
-- non-breakout / BUY / OI-building: 5 samples, expectancy -0.002032 — below the 6-sample gate and negative edge,
-- non-breakout / SELL / OI-building: 1 sample, expectancy -0.003061 — below the gate and negative edge.
+The workflow restored the prior runtime cache, verified TESTNET credentials, built successfully, collected another bounded 5.5-hour live exact-feature window, ran profile-aware readiness, uploaded evidence artifacts, and persisted the updated Quant runtime cache. The TESTNET Hedge Mode blocker was cleared by the verified TESTNET-only ONE_WAY bootstrap. Mainnet and real execution remain disabled.
 
-Therefore the relaxed TESTNET profile does **not** manufacture a candidate from the existing evidence. Readiness remains **NOT_READY** until new live evidence produces a non-breakout bucket with at least 6 samples and net expectancy >= 0.0006.
-
-The workflow verified testnet credentials, built successfully, collected live exact-feature evidence for the bounded 5.5-hour window, ran readiness, uploaded the evidence artifact, and persisted the Quant runtime cache. Mainnet and real execution remain disabled.
+The important result is now empirical: **36 live observations are enough for two non-breakout BALANCED_TESTNET buckets to pass the 6-sample count gate, but both have materially negative fee/slippage-adjusted expectancy.** Therefore the blocker is no longer merely insufficient bucket population for those states; current observed edge is negative. No threshold should be weakened to manufacture a candidate.
 
 ## Next evidence gate
 
 The remaining blocker is empirical rather than missing core plumbing:
 
 1. continue the current `main` on Binance Futures TESTNET in SHADOW,
-2. accumulate enough real live exact-feature observations for at least one BALANCED_TESTNET non-breakout bucket to reach 6 samples with net expectancy >= 0.0006,
-3. use the automatic profile-aware runtime readiness fields and `npm run quant:readiness` as independent checks,
-4. only if a balanced candidate survives the gate, promote manually to REAL_TESTNET,
-5. then perform an extended TESTNET execution/restart/recovery run before any mainnet discussion.
+2. accumulate fresh live observations across changing regimes; do not repeatedly promote the currently negative non-breakout RANGE buckets,
+3. require a **non-breakout** BALANCED_TESTNET bucket with sample count >= 6 and net expectancy >= 0.0006,
+4. use the automatic profile-aware runtime readiness fields and `npm run quant:readiness` as independent checks,
+5. only if a balanced candidate survives the gate, promote manually to REAL_TESTNET,
+6. then perform an extended TESTNET execution/restart/recovery run before any mainnet discussion.
 
-The long SHADOW evidence workflow is now operational with testnet-only repository credentials. Do not claim profitability or mainnet readiness before the evidence gate is satisfied.
+The long SHADOW evidence workflow is operational with testnet-only repository credentials. Do not claim profitability or mainnet readiness before the evidence gate is satisfied.
