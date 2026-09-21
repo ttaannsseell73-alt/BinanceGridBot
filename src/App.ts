@@ -34,6 +34,7 @@ import {
   isTradeFillUpdate
 } from './engine/UserPositionSync';
 import { UserRiskSyncState } from './engine/UserRiskSyncState';
+import { getQuantRiskProfile } from './strategy/QuantRiskProfile';
 
 export class App {
   private journal: IntentJournal;
@@ -71,13 +72,16 @@ export class App {
     minLiquidationDistancePct: 0.05,
     maxConsecutiveCriticalErrors: 10
   });
+  private readonly quantExecutionMode = config.QUANT_EXECUTION_MODE;
+  private readonly quantRiskProfile =
+    getQuantRiskProfile(this.quantExecutionMode);
   private quantEngine = new QuantEngine({
     feeRate: 0.0004,
     syntheticSlippage: 0.0001,
-    minSamples: 10
+    minSamples: this.quantRiskProfile.minSamples,
+    matchMode: this.quantRiskProfile.matchMode
   });
   private quantModelLoaded = false;
-  private readonly quantExecutionMode = config.QUANT_EXECUTION_MODE;
   private readonly quantBaseModelPath = path.join(
     process.cwd(),
     'artifacts',
@@ -138,10 +142,10 @@ export class App {
       gridSpacing: this.gridSpacing, // example 100 USDT
       baseOrderQty: 0.01,
       skewFactor: 0.5,
-      minExpectancy: 0.0010,
-      minSamples: 10,
-      safetyMultiplier: 1.5,
-      expectedCostBps: 0.0018
+      minExpectancy: this.quantRiskProfile.minExpectancy,
+      minSamples: this.quantRiskProfile.minSamples,
+      safetyMultiplier: this.quantRiskProfile.safetyMultiplier,
+      expectedCostBps: this.quantRiskProfile.expectedCostRate
     });
     
     this.watchdog = new Watchdog();
@@ -182,7 +186,11 @@ export class App {
           modelPath: candidate.modelPath,
           source: candidate.source,
           observations,
-          quantExecutionMode: this.quantExecutionMode
+          quantExecutionMode: this.quantExecutionMode,
+          quantRiskProfile: this.quantRiskProfile.name,
+          quantMatchMode: this.quantRiskProfile.matchMode,
+          minSamples: this.quantRiskProfile.minSamples,
+          minExpectancy: this.quantRiskProfile.minExpectancy
         }, 'Quant model loaded');
         return;
       } catch (err) {
@@ -216,9 +224,10 @@ export class App {
       const readiness = analyzeQuantReadiness(
         this.quantEngine.exportModel(),
         {
-          minSamples: 10,
-          minExpectancy: 0.001,
-          rawRoundTripPenalty: (0.0004 * 2) + (0.0001 * 2)
+          minSamples: this.quantRiskProfile.minSamples,
+          minExpectancy: this.quantRiskProfile.minExpectancy,
+          rawRoundTripPenalty: (0.0004 * 2) + (0.0001 * 2),
+          stateMode: this.quantRiskProfile.matchMode
         }
       );
 
@@ -227,6 +236,10 @@ export class App {
         anchorTimestamp: event.anchorTimestamp,
         completedTimestamp: event.completedTimestamp,
         exactHash: event.exactHash,
+        quantRiskProfile: this.quantRiskProfile.name,
+        quantStateMode: readiness.stateMode,
+        minSamples: readiness.minSamples,
+        minExpectancy: readiness.minExpectancy,
         netReturn: event.outcome.netReturn,
         filledOrders: event.outcome.filledOrders,
         terminalPosition: event.outcome.terminalPosition,
