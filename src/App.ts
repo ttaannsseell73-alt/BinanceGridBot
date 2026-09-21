@@ -22,7 +22,7 @@ import { syncStartupRiskState } from './engine/StartupRiskSync';
 import { ensureStartupSymbolRiskConfig } from './engine/StartupSymbolConfig';
 import { EmergencyReason, EmergencyRiskEngine } from './engine/EmergencyRiskEngine';
 import { executeEmergencyExit } from './engine/EmergencyExitEngine';
-import { assertQuantExecutionModeSafe, resolveQuantExecution } from './strategy/QuantExecutionPolicy';
+import { assertQuantExecutionModeSafe, isBinanceTestnetPair, resolveQuantExecution } from './strategy/QuantExecutionPolicy';
 import { LiveQuantObserver, LiveQuantObservationEvent } from './simulation/LiveQuantObserver';
 import { QuantModelStore } from './simulation/QuantModelStore';
 import { analyzeQuantReadiness } from './simulation/QuantReadiness';
@@ -35,6 +35,7 @@ import {
 } from './engine/UserPositionSync';
 import { UserRiskSyncState } from './engine/UserRiskSyncState';
 import { getQuantRiskProfile } from './strategy/QuantRiskProfile';
+import { ensureStartupPositionMode } from './engine/StartupPositionMode';
 
 export class App {
   private journal: IntentJournal;
@@ -447,6 +448,18 @@ export class App {
         canceledAllOrders: cleanup.exit?.canceledAllOrders ?? false
       }, 'SHADOW clean-start completed before symbol risk configuration');
     }
+
+    const allowTestnetPositionModeAutoFix =
+      this.quantExecutionMode !== 'REAL_LIVE' &&
+      isBinanceTestnetPair(
+        config.BINANCE_FUTURES_URL,
+        config.BINANCE_FUTURES_WS_URL
+      );
+
+    await ensureStartupPositionMode(
+      this.restClient,
+      allowTestnetPositionModeAutoFix
+    );
 
     // Enforce the canonical symbol risk configuration before trading.
     // Any Binance rejection here fails startup closed.
