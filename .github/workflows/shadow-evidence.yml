@@ -24,6 +24,7 @@ jobs:
       BINANCE_FUTURES_URL: https://testnet.binancefuture.com
       BINANCE_FUTURES_WS_URL: wss://stream.binancefuture.com
       SYMBOL: BTCUSDT
+      # SHADOW uses BALANCED_TESTNET readiness but remains strictly non-executing.
       QUANT_EXECUTION_MODE: SHADOW
       I_UNDERSTAND_LIVE: NO
       I_UNDERSTAND_QUANT_LIVE: NO
