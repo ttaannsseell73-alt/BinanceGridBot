@@ -1,4 +1,6 @@
 import { PriceActionFeatures, MicrostructureFeatures, QuantScore } from '../models/strategy';
+import { buildBalancedFeatureHash, buildBalancedFeatureHashFromExactHash } from './QuantStateBucketing';
+import { QuantMatchMode } from './QuantRiskProfile';
 
 type ReturnBasis = 'RAW_ROUND_TRIP' | 'NET_GRID_EPISODE';
 
@@ -25,6 +27,7 @@ export interface QuantConfig {
   feeRate: number;
   syntheticSlippage: number;
   minSamples: number;
+  matchMode?: QuantMatchMode;
 }
 
 export interface QuantModelV1 {
@@ -172,6 +175,24 @@ export class QuantEngine {
       return this.calculateScore(exactMatches, 'EXACT', exactHash);
     }
 
+    if (this.config.matchMode === 'BALANCED') {
+      const balancedHash = buildBalancedFeatureHash(pa, ms);
+
+      if (balancedHash) {
+        const balancedMatches = this.observations.filter(
+          o => buildBalancedFeatureHashFromExactHash(o.exactHash) === balancedHash
+        );
+
+        if (balancedMatches.length >= this.config.minSamples) {
+          return this.calculateScore(
+            balancedMatches,
+            'BALANCED',
+            balancedHash
+          );
+        }
+      }
+    }
+
     /*
      * Historical kline replay deliberately has no true trade-level
      * microstructure/OI. Live trading does. PA-only fallback is therefore the
@@ -199,7 +220,7 @@ export class QuantEngine {
 
   private calculateScore(
     observations: Observation[],
-    modelSource: 'EXACT' | 'PA_FALLBACK',
+    modelSource: 'EXACT' | 'BALANCED' | 'PA_FALLBACK',
     featureHash: string
   ): QuantScore {
     const sampleCount = observations.length;
