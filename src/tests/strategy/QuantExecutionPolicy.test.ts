@@ -142,6 +142,38 @@ describe('QuantExecutionPolicy', () => {
     expect(decision.reason).toBe('REAL_QUANT_UNAVAILABLE');
   });
 
+
+  it('accepts balanced live-feature scores on REAL_TESTNET only', () => {
+    const balancedScore: QuantScore = {
+      ...realScore,
+      sampleCount: 6,
+      expectancy: 0.0007,
+      modelSource: 'BALANCED'
+    };
+
+    const testnetDecision = resolveQuantExecution({
+      mode: 'REAL_TESTNET',
+      realQuantScore: balancedScore,
+      activePriceAction: pa,
+      activeMicrostructure: ms,
+      smokeScore
+    });
+
+    expect(testnetDecision.canExecute).toBe(true);
+    expect(testnetDecision.reason).toBe('REAL_QUANT_READY');
+
+    const liveDecision = resolveQuantExecution({
+      mode: 'REAL_LIVE',
+      realQuantScore: balancedScore,
+      activePriceAction: pa,
+      activeMicrostructure: ms,
+      smokeScore
+    });
+
+    expect(liveDecision.canExecute).toBe(false);
+    expect(liveDecision.reason).toBe('REAL_QUANT_UNAVAILABLE');
+  });
+
   it('real mode passes only an exact live-feature score when ready', () => {
     const decision = resolveQuantExecution({
       mode: 'REAL_TESTNET',

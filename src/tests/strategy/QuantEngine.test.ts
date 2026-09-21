@@ -151,3 +151,73 @@ describe('QuantEngine model bridge', () => {
     expect(score.expectancy).toBeCloseTo(0.001);
   });
 });
+
+
+describe('QuantEngine balanced testnet matching', () => {
+  const pa: PriceActionFeatures = {
+    swingHighs: [],
+    swingLows: [],
+    marketStructure: 'LH',
+    inRange: true,
+    rangeHigh: 51000,
+    rangeLow: 49000,
+    breakoutUp: false,
+    breakoutDown: false,
+    liquiditySweepUp: false,
+    liquiditySweepDown: false
+  };
+
+  const ms: MicrostructureFeatures = {
+    cvd: 5,
+    takerImbalance: 1.2,
+    oiDelta: 0.001,
+    absorption: false
+  };
+
+  it('combines nearby complete live states only when balanced matching is enabled', () => {
+    const engine = new QuantEngine({
+      feeRate: 0,
+      syntheticSlippage: 0,
+      minSamples: 2,
+      matchMode: 'BALANCED'
+    });
+
+    engine.recordNetObservation(pa, ms, 0.0010, 60_000);
+    engine.recordNetObservation(
+      { ...pa, liquiditySweepUp: true },
+      { ...ms, absorption: true },
+      0.0014,
+      60_000
+    );
+
+    const score = engine.evaluate(pa, ms);
+
+    expect(score.modelSource).toBe('BALANCED');
+    expect(score.sampleCount).toBe(2);
+    expect(score.expectancy).toBeCloseTo(0.0012);
+    expect(score.featureHash).toContain('REG:RANGE');
+    expect(score.featureHash).toContain('BRK:NO');
+  });
+
+  it('keeps strict matching isolated from the balanced testnet bucket', () => {
+    const engine = new QuantEngine({
+      feeRate: 0,
+      syntheticSlippage: 0,
+      minSamples: 2,
+      matchMode: 'STRICT'
+    });
+
+    engine.recordNetObservation(pa, ms, 0.0010, 60_000);
+    engine.recordNetObservation(
+      { ...pa, liquiditySweepUp: true },
+      { ...ms, absorption: true },
+      0.0014,
+      60_000
+    );
+
+    const score = engine.evaluate(pa, ms);
+
+    expect(score.modelSource).toBe('NONE');
+    expect(score.sampleCount).toBe(1);
+  });
+});

@@ -45,7 +45,7 @@ export interface QuantScore {
   mae: number; // Maximum Adverse Excursion
   mfe: number; // Maximum Favorable Excursion
   expectedDurationMs?: number;
-  modelSource?: 'EXACT' | 'PA_FALLBACK' | 'NONE';
+  modelSource?: 'EXACT' | 'BALANCED' | 'PA_FALLBACK' | 'NONE';
   featureHash?: string;
 }
 

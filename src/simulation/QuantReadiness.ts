@@ -1,4 +1,6 @@
 import { QuantModel } from '../strategy/QuantEngine';
+import { buildBalancedFeatureHashFromExactHash } from '../strategy/QuantStateBucketing';
+import { QuantMatchMode } from '../strategy/QuantRiskProfile';
 
 export interface QuantReadinessState {
   exactHash: string;
@@ -11,6 +13,7 @@ export interface QuantReadinessState {
 
 export interface QuantReadinessReport {
   modelVersion: number;
+  stateMode: QuantMatchMode;
   totalObservations: number;
   liveExactObservations: number;
   liveExactStates: number;
@@ -24,6 +27,7 @@ export interface QuantReadinessConfig {
   minSamples: number;
   minExpectancy: number;
   rawRoundTripPenalty: number;
+  stateMode?: QuantMatchMode;
 }
 
 interface ReadinessObservation {
@@ -47,12 +51,20 @@ export function analyzeQuantReadiness(
       !o.exactHash.includes('UNAVAILABLE')
     );
 
+  const stateMode = config.stateMode ?? 'STRICT';
   const groups = new Map<string, ReadinessObservation[]>();
 
   for (const observation of observations) {
-    const group = groups.get(observation.exactHash) ?? [];
+    const stateHash =
+      stateMode === 'BALANCED'
+        ? buildBalancedFeatureHashFromExactHash(observation.exactHash)
+        : observation.exactHash;
+
+    if (!stateHash) continue;
+
+    const group = groups.get(stateHash) ?? [];
     group.push(observation);
-    groups.set(observation.exactHash, group);
+    groups.set(stateHash, group);
   }
 
   const states: QuantReadinessState[] = [];
@@ -75,8 +87,12 @@ export function analyzeQuantReadiness(
     const expectancy = sampleCount > 0 ? total / sampleCount : 0;
     const hitRate = sampleCount > 0 ? wins / sampleCount : 0;
     const breakout =
-      exactHash.includes('B_UP:true') ||
-      exactHash.includes('B_DN:true');
+      stateMode === 'BALANCED'
+        ? exactHash.includes('BRK:YES')
+        : (
+          exactHash.includes('B_UP:true') ||
+          exactHash.includes('B_DN:true')
+        );
 
     states.push({
       exactHash,
@@ -99,6 +115,7 @@ export function analyzeQuantReadiness(
 
   return {
     modelVersion: model.version,
+    stateMode,
     totalObservations: model.observations.length,
     liveExactObservations: observations.length,
     liveExactStates: states.length,
