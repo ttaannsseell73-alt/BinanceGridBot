@@ -18,7 +18,7 @@
 - Grid episodes remain stable between explicit recenter events.
 - Price-action breakout blocks new grid exposure.
 - Default Quant mode is **SHADOW**.
-- Real Quant execution requires an **EXACT** live feature match. Historical PA-only fallback is diagnostic and cannot place orders.
+- TESTNET Quant uses the locked **BALANCED_TESTNET** live-state profile; REAL_LIVE remains **STRICT_LIVE / EXACT-only**. Historical PA-only fallback is diagnostic and cannot place orders.
 
 ## Current safety stack
 
@@ -89,21 +89,32 @@ Run:
 
 `npm run quant:readiness`
 
-A state is only a candidate when:
-- it contains real live exact features (no `UNAVAILABLE` dimensions),
-- it is not a breakout state,
-- sample count >= 10,
-- net expectancy >= 0.001.
+Two profiles are locked:
 
-Promotion is manual. No code automatically switches SHADOW to REAL_TESTNET.
+**BALANCED_TESTNET** — used by SHADOW and REAL_TESTNET:
+- every contributing observation must still contain real live Price Action + CVD + taker imbalance + Open Interest + absorption; historical `UNAVAILABLE` observations never enter the bucket,
+- nearby exact states are grouped by range/trend regime + order-flow bias + OI building/not-building + breakout flag,
+- liquidity-sweep direction and absorption value remain observed but do not split the TESTNET bucket,
+- breakout buckets remain non-executable,
+- sample count >= 6,
+- fee/slippage-adjusted net expectancy >= 0.0006,
+- StrategyEngine economic safety multiplier = 1.3.
+
+**STRICT_LIVE** — used only by REAL_LIVE:
+- exact live feature hash only,
+- sample count >= 10,
+- net expectancy >= 0.001,
+- StrategyEngine economic safety multiplier = 1.5.
+
+Promotion remains manual. No code automatically switches SHADOW to REAL_TESTNET or REAL_LIVE.
 
 ## Latest deterministic proof
 
-GitHub CI on current canonical main (2026-09-20):
-- functional baseline SHA before this docs-only update: `2feabd6870391f980f291e8a2debc6461d123be8`
+GitHub CI on current canonical main (2026-09-21):
+- balanced TESTNET profile implementation SHA: `ad5bec6a94bfa77a9c0082537af97423e6a40220`
 - TypeScript build: **PASS**
-- Test files: **28 passed**
-- Tests: **112 passed**
+- Test files: **30 passed**
+- Tests: **123 passed**
 - Breakout re-entry regression: **PASS** — breakout flags clear after a candle closes back inside the remembered range; the observed live breakout state is not a sticky-state bug.
 - Idle reconciliation regression: **PASS** — `getAllOrders` is skipped when there are no local open intents.
 - User-risk ordering regression: **PASS** — execution stays blocked across fill/account-update ordering gaps until a fresh absolute position state catches up.
@@ -122,18 +133,26 @@ GitHub Actions `Shadow Evidence` run `35513241574` on 2026-09-20 completed **SUC
 - executable states: **0**
 - readiness: **NOT_READY**
 
-The largest exact state has only 3 observations. No state reaches the locked minimum sample count of 10 while also satisfying the non-breakout and net-expectancy gates. Therefore no candidate is promotable.
+The original strict exact-state report had a maximum of 3 observations per exact state.
 
-The workflow verified testnet credentials, built successfully, collected live exact-feature evidence for the bounded 5.5-hour window, ran readiness, uploaded the evidence artifact, and persisted the Quant runtime cache. No Quant threshold was lowered. Mainnet and real execution remain disabled.
+The same 18 live observations were recalculated under the new BALANCED_TESTNET grouping:
+- breakout / SELL / OI-building: 7 samples, expectancy -0.000498 — blocked by breakout and negative edge,
+- breakout / BUY / OI-building: 5 samples, expectancy +0.000827 — blocked by breakout,
+- non-breakout / BUY / OI-building: 5 samples, expectancy -0.002032 — below the 6-sample gate and negative edge,
+- non-breakout / SELL / OI-building: 1 sample, expectancy -0.003061 — below the gate and negative edge.
+
+Therefore the relaxed TESTNET profile does **not** manufacture a candidate from the existing evidence. Readiness remains **NOT_READY** until new live evidence produces a non-breakout bucket with at least 6 samples and net expectancy >= 0.0006.
+
+The workflow verified testnet credentials, built successfully, collected live exact-feature evidence for the bounded 5.5-hour window, ran readiness, uploaded the evidence artifact, and persisted the Quant runtime cache. Mainnet and real execution remain disabled.
 
 ## Next evidence gate
 
 The remaining blocker is empirical rather than missing core plumbing:
 
 1. continue the current `main` on Binance Futures TESTNET in SHADOW,
-2. accumulate enough real live exact-feature observations for at least one state to reach the locked sample gate,
-3. use the automatic runtime readiness fields and `npm run quant:readiness` as independent checks,
-4. only if candidate states survive the gate, promote manually to REAL_TESTNET,
+2. accumulate enough real live exact-feature observations for at least one BALANCED_TESTNET non-breakout bucket to reach 6 samples with net expectancy >= 0.0006,
+3. use the automatic profile-aware runtime readiness fields and `npm run quant:readiness` as independent checks,
+4. only if a balanced candidate survives the gate, promote manually to REAL_TESTNET,
 5. then perform an extended TESTNET execution/restart/recovery run before any mainnet discussion.
 
 The long SHADOW evidence workflow is now operational with testnet-only repository credentials. Do not claim profitability or mainnet readiness before the evidence gate is satisfied.
