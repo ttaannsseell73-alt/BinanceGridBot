@@ -43,6 +43,7 @@ export interface IBinanceClient {
   getOpenOrders(symbol: string): Promise<OrderResponse[]>;
   getAllOrders(symbol: string, limit?: number): Promise<OrderResponse[]>;
   getPositionMode(): Promise<'ONE_WAY' | 'HEDGE'>;
+  setPositionMode(mode: 'ONE_WAY' | 'HEDGE'): Promise<void>;
   getPositionAmount(symbol: string): Promise<number>;
   getPositionRisk(symbol: string): Promise<PositionRiskSnapshot>;
   getSymbolRiskConfig(symbol: string): Promise<SymbolRiskConfig>;
