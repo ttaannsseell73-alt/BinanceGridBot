@@ -98,7 +98,13 @@ export function resolveQuantExecution(params: {
       params.activePriceAction,
       params.activeMicrostructure
     ) ||
-    params.realQuantScore.modelSource !== 'EXACT'
+    (
+      params.realQuantScore.modelSource !== 'EXACT' &&
+      !(
+        params.mode === 'REAL_TESTNET' &&
+        params.realQuantScore.modelSource === 'BALANCED'
+      )
+    )
   ) {
     return {
       canExecute: false,
