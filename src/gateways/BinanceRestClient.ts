@@ -330,6 +330,14 @@ export class BinanceRestClient implements IBinanceClient {
     return data?.dualSidePosition === true ? 'HEDGE' : 'ONE_WAY';
   }
 
+  async setPositionMode(mode: 'ONE_WAY' | 'HEDGE'): Promise<void> {
+    await this.request(
+      'POST',
+      '/fapi/v1/positionSide/dual',
+      { dualSidePosition: mode === 'HEDGE' ? 'true' : 'false' }
+    );
+  }
+
   async getPositionAmount(symbol: string): Promise<number> {
     return (await this.getPositionRisk(symbol)).positionAmt;
   }
