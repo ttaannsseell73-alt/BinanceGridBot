@@ -2,6 +2,8 @@ name: Shadow Evidence
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '17 0,12 * * *'
   push:
     branches: [ main ]
     paths:
