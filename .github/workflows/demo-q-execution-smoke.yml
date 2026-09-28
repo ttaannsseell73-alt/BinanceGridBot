@@ -1,0 +1,317 @@
+name: Demo Q Canonical Execution Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/demo-q-execution-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+      BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+      BINANCE_FUTURES_URL: https://testnet.binancefuture.com
+      SYMBOL: QUSDT
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify demo secrets
+        shell: bash
+        run: |
+          test -n "$BINANCE_API_KEY"
+          test -n "$BINANCE_API_SECRET"
+
+      - name: Run canonical Q demo execution smoke
+        shell: bash
+        run: |
+          node <<'NODE'
+          const crypto=require('crypto');
+          const fs=require('fs');
+
+          const base=process.env.BINANCE_FUTURES_URL;
+          const key=process.env.BINANCE_API_KEY;
+          const secret=process.env.BINANCE_API_SECRET;
+          const symbol=process.env.SYMBOL || 'QUSDT';
+          const runId=process.env.GITHUB_RUN_ID || String(Date.now());
+          const entryClient=('qsmk-'+runId+'-e').slice(0,36);
+          const exitClient=('qsmk-'+runId+'-x').slice(0,36);
+          const stopClient=('qsmk-'+runId+'-s').slice(0,36);
+          let offset=0;
+          let stopPlaced=false;
+          let report={
+            environment:'BINANCE_USDM_TESTNET',
+            symbol,
+            canonical:{marginType:'ISOLATED',leverage:1,positionMode:'ONE_WAY',multiAssets:false},
+            entryClient,exitClient,stopClient,
+            stages:{}
+          };
+
+          function decs(s){
+            s=String(s);
+            if(!s.includes('.')) return 0;
+            return s.replace(/0+$/,'').split('.')[1]?.length||0;
+          }
+          function stepCeil(x,step){
+            return Math.ceil((x-1e-12)/step)*step;
+          }
+          function tickCeil(x,tick){
+            return Math.ceil((x-1e-12)/tick)*tick;
+          }
+          function tickFloor(x,tick){
+            return Math.floor((x+1e-12)/tick)*tick;
+          }
+
+          async function raw(path,params={},method='GET',signed=false){
+            const p={...params};
+            if(signed){
+              p.timestamp=Date.now()+offset;
+              p.recvWindow=5000;
+            }
+            let qs=new URLSearchParams(Object.entries(p).filter(([,v])=>v!==undefined && v!==null).map(([k,v])=>[k,String(v)])).toString();
+            if(signed){
+              const sig=crypto.createHmac('sha256',secret).update(qs).digest('hex');
+              qs += '&signature='+sig;
+            }
+            const res=await fetch(base+path+(qs?'?'+qs:''),{
+              method,
+              headers:signed?{'X-MBX-APIKEY':key}:{}
+            });
+            let body;
+            try{body=await res.json()}catch{body=await res.text()}
+            if(!res.ok){
+              const e=new Error(method+' '+path+' '+res.status+' '+JSON.stringify(body));
+              e.status=res.status;e.body=body;
+              throw e;
+            }
+            return {body,status:res.status,headers:Object.fromEntries(res.headers.entries())};
+          }
+
+          async function signed(path,params={},method='GET'){
+            return raw(path,params,method,true);
+          }
+
+          async function getPosition(){
+            let r;
+            try{r=await signed('/fapi/v3/positionRisk',{symbol});}
+            catch{r=await signed('/fapi/v2/positionRisk',{symbol});}
+            const arr=Array.isArray(r.body)?r.body:[r.body];
+            const p=arr.find(x=>x.symbol===symbol)||arr[0]||{};
+            return p;
+          }
+
+          async function cleanup(){
+            const cleanup={};
+            try{
+              const p=await getPosition();
+              const amt=Number(p.positionAmt||0);
+              cleanup.positionBefore=amt;
+              if(Math.abs(amt)>0){
+                const side=amt>0?'SELL':'BUY';
+                const qty=String(Math.abs(amt));
+                const r=await signed('/fapi/v1/order',{
+                  symbol,side,positionSide:'BOTH',type:'MARKET',quantity:qty,
+                  newClientOrderId:('qsmk-'+runId+'-cleanup').slice(0,36),
+                  reduceOnly:true,newOrderRespType:'RESULT'
+                },'POST');
+                cleanup.marketCloseStatus=r.body.status||null;
+              }
+            }catch(e){cleanup.closeError=String(e.message||e);}
+            try{
+              const open=await signed('/fapi/v1/openAlgoOrders',{symbol});
+              const arr=Array.isArray(open.body)?open.body:[];
+              const ours=arr.filter(x=>x.clientAlgoId===stopClient);
+              cleanup.openAlgoBeforeCancel=ours.length;
+              for(const x of ours){
+                try{
+                  await signed('/fapi/v1/algoOrder',{clientAlgoId:stopClient},'DELETE');
+                  cleanup.stopCancelled=true;
+                }catch(e){cleanup.stopCancelError=String(e.message||e);}
+              }
+            }catch(e){cleanup.algoQueryError=String(e.message||e);}
+            try{
+              const p=await getPosition();
+              cleanup.positionAfter=Number(p.positionAmt||0);
+              const oo=await signed('/fapi/v1/openOrders',{symbol});
+              cleanup.openOrdersAfter=Array.isArray(oo.body)?oo.body.length:null;
+              const ao=await signed('/fapi/v1/openAlgoOrders',{symbol});
+              cleanup.openAlgoAfter=Array.isArray(ao.body)?ao.body.length:null;
+            }catch(e){cleanup.finalStateError=String(e.message||e);}
+            report.cleanup=cleanup;
+          }
+
+          (async()=>{
+            const t=await raw('/fapi/v1/time');
+            offset=Number(t.body.serverTime)-Date.now();
+
+            // HARD CANONICAL PRE-FLIGHT
+            const mode=await signed('/fapi/v1/positionSide/dual');
+            const multi=await signed('/fapi/v1/multiAssetsMargin');
+            const sc=await signed('/fapi/v1/symbolConfig',{symbol});
+            const cfg=(Array.isArray(sc.body)?sc.body:[sc.body]).find(x=>x.symbol===symbol)||{};
+            const pos0=await getPosition();
+            const oo0=await signed('/fapi/v1/openOrders',{symbol});
+            const ao0=await signed('/fapi/v1/openAlgoOrders',{symbol});
+            const contract={
+              oneWay:mode.body.dualSidePosition===false,
+              multiAssetsOff:multi.body.multiAssetsMargin===false,
+              marginType:String(cfg.marginType||'').toUpperCase()==='ISOLATED',
+              leverage:Number(cfg.leverage)===1,
+              flat:Math.abs(Number(pos0.positionAmt||0))===0,
+              noOpenOrders:Array.isArray(oo0.body)&&oo0.body.length===0,
+              noOpenAlgo:Array.isArray(ao0.body)&&ao0.body.length===0
+            };
+            report.stages.preflight=contract;
+            if(!Object.values(contract).every(Boolean)) throw new Error('CANONICAL_PREFLIGHT_FAIL '+JSON.stringify(contract));
+
+            const ex=await raw('/fapi/v1/exchangeInfo');
+            const si=ex.body.symbols.find(x=>x.symbol===symbol);
+            if(!si || si.status!=='TRADING') throw new Error('QUSDT_NOT_TRADING');
+            const pf=si.filters.find(x=>x.filterType==='PRICE_FILTER');
+            const lf=si.filters.find(x=>x.filterType==='LOT_SIZE');
+            const nf=si.filters.find(x=>x.filterType==='MIN_NOTIONAL'||x.filterType==='NOTIONAL');
+            const tick=Number(pf.tickSize), step=Number(lf.stepSize);
+            const minQty=Number(lf.minQty||0);
+            const minNotional=Number(nf?.notional||nf?.minNotional||5);
+            const priceDp=decs(pf.tickSize), qtyDp=decs(lf.stepSize);
+
+            const book=await raw('/fapi/v1/ticker/bookTicker',{symbol});
+            const ask=Number(book.body.askPrice), bid=Number(book.body.bidPrice);
+            if(!(ask>0&&bid>0)) throw new Error('BAD_BOOK');
+            const spreadBps=(ask-bid)/((ask+bid)/2)*10000;
+            const maxEntryDeviationBps=30;
+            const entryLimit=tickCeil(ask*(1+maxEntryDeviationBps/10000),tick);
+            let qty=stepCeil(Math.max(minQty,(minNotional*1.20)/ask),step);
+            const priceStr=entryLimit.toFixed(priceDp);
+            const qtyStr=qty.toFixed(qtyDp);
+            report.stages.market={
+              bid,ask,spreadBps:Number(spreadBps.toFixed(4)),
+              minNotional,tickSize:pf.tickSize,stepSize:lf.stepSize,
+              plannedQty:qtyStr,plannedLimit:priceStr,maxEntryDeviationBps
+            };
+
+            // ENTRY: bounded marketable IOC limit
+            const entry=await signed('/fapi/v1/order',{
+              symbol,side:'BUY',positionSide:'BOTH',type:'LIMIT',timeInForce:'IOC',
+              quantity:qtyStr,price:priceStr,newClientOrderId:entryClient,
+              reduceOnly:false,newOrderRespType:'RESULT'
+            },'POST');
+            report.stages.entry={
+              status:entry.body.status,
+              executedQty:entry.body.executedQty,
+              avgPrice:entry.body.avgPrice,
+              orderId:entry.body.orderId
+            };
+
+            const p1=await getPosition();
+            const amt=Number(p1.positionAmt||0);
+            if(!(amt>0)) throw new Error('ENTRY_NOT_FILLED positionAmt='+String(p1.positionAmt));
+            report.stages.positionAfterEntry={positionAmt:p1.positionAmt,entryPrice:p1.entryPrice,markPrice:p1.markPrice};
+
+            // SERVER-SIDE CATASTROPHIC PROTECTION
+            const mark=Number(p1.markPrice||p1.entryPrice||ask);
+            const trigger=tickFloor(mark*0.80,tick);
+            const triggerStr=trigger.toFixed(priceDp);
+            const stop=await signed('/fapi/v1/algoOrder',{
+              algoType:'CONDITIONAL',symbol,side:'SELL',positionSide:'BOTH',
+              type:'STOP_MARKET',triggerPrice:triggerStr,workingType:'MARK_PRICE',
+              closePosition:true,clientAlgoId:stopClient
+            },'POST');
+            stopPlaced=true;
+            report.stages.protectionSubmit={
+              algoId:stop.body.algoId||null,
+              clientAlgoId:stop.body.clientAlgoId||stopClient,
+              algoStatus:stop.body.algoStatus||null,
+              triggerPrice:triggerStr
+            };
+
+            const oq=await signed('/fapi/v1/openAlgoOrders',{symbol});
+            const algos=Array.isArray(oq.body)?oq.body:[];
+            const protectedNow=algos.some(x=>x.clientAlgoId===stopClient);
+            report.stages.protectionVerify={protectedNow,openAlgoCount:algos.length};
+            if(!protectedNow) throw new Error('PROTECTION_NOT_VERIFIED');
+
+            // RESTART/RECONCILE SIMULATION: rebuild state only from exchange
+            const reconcilePos=await getPosition();
+            const reconcileOrd=await signed('/fapi/v1/openOrders',{symbol});
+            const reconcileAlgo=await signed('/fapi/v1/openAlgoOrders',{symbol});
+            const rPos=Number(reconcilePos.positionAmt||0);
+            const rAlgo=(Array.isArray(reconcileAlgo.body)?reconcileAlgo.body:[]).filter(x=>x.clientAlgoId===stopClient);
+            report.stages.reconcile={
+              positionAmt:rPos,
+              normalOpenOrders:Array.isArray(reconcileOrd.body)?reconcileOrd.body.length:null,
+              protectionCount:rAlgo.length,
+              state:rPos>0&&rAlgo.length===1?'OPEN_PROTECTED':'MISMATCH'
+            };
+            if(report.stages.reconcile.state!=='OPEN_PROTECTED') throw new Error('RECONCILE_MISMATCH');
+
+            // EXIT: risk-reducing market
+            const exitQty=Math.abs(rPos).toFixed(qtyDp);
+            const exit=await signed('/fapi/v1/order',{
+              symbol,side:'SELL',positionSide:'BOTH',type:'MARKET',quantity:exitQty,
+              newClientOrderId:exitClient,reduceOnly:true,newOrderRespType:'RESULT'
+            },'POST');
+            report.stages.exit={status:exit.body.status,executedQty:exit.body.executedQty,avgPrice:exit.body.avgPrice};
+
+            // Cancel still-open protection after flat
+            try{
+              await signed('/fapi/v1/algoOrder',{clientAlgoId:stopClient},'DELETE');
+              report.stages.protectionCancel={cancelled:true};
+            }catch(e){
+              report.stages.protectionCancel={cancelled:false,message:String(e.message||e)};
+            }
+
+            const p2=await getPosition();
+            const oo2=await signed('/fapi/v1/openOrders',{symbol});
+            const ao2=await signed('/fapi/v1/openAlgoOrders',{symbol});
+            report.stages.final={
+              positionAmt:Number(p2.positionAmt||0),
+              openOrders:Array.isArray(oo2.body)?oo2.body.length:null,
+              openAlgoOrders:Array.isArray(ao2.body)?ao2.body.length:null
+            };
+            if(Math.abs(report.stages.final.positionAmt)>0 || report.stages.final.openOrders!==0 || report.stages.final.openAlgoOrders!==0){
+              throw new Error('FINAL_NOT_FLAT '+JSON.stringify(report.stages.final));
+            }
+
+            report.result='PASS';
+          })().catch(async e=>{
+            report.result='FAIL';
+            report.error=String(e && e.stack || e);
+            await cleanup();
+            process.exitCode=2;
+          }).finally(()=>{
+            report.generatedAt=new Date().toISOString();
+            fs.writeFileSync('demo-q-execution-smoke.json',JSON.stringify(report,null,2)+'\n');
+            console.log(JSON.stringify(report,null,2));
+          });
+          NODE
+
+      - name: Publish result
+        if: always()
+        shell: bash
+        run: |
+          if [ -f demo-q-execution-smoke.json ]; then
+            {
+              echo "## Q Canonical Demo Execution Smoke"
+              echo
+              echo '~~~json'
+              cat demo-q-execution-smoke.json
+              echo '~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-q-execution-smoke
+          path: demo-q-execution-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
