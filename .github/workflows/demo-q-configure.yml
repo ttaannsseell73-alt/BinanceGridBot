@@ -1,0 +1,117 @@
+name: Demo Q Account Configure
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/demo-q-configure.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+      BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+      BINANCE_FUTURES_URL: https://testnet.binancefuture.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure QUSDT safely on demo
+        shell: bash
+        run: |
+          node <<'NODE'
+          const crypto=require('crypto');
+          const fs=require('fs');
+          const base=process.env.BINANCE_FUTURES_URL;
+          const key=process.env.BINANCE_API_KEY;
+          const secret=process.env.BINANCE_API_SECRET;
+          const symbol='QUSDT';
+          let offset=0;
+
+          async function req(path, params={}, method='GET', signed=false){
+            const p={...params};
+            if(signed){
+              p.timestamp=Date.now()+offset;
+              p.recvWindow=5000;
+            }
+            let qs=new URLSearchParams(p).toString();
+            if(signed){
+              const sig=crypto.createHmac('sha256',secret).update(qs).digest('hex');
+              qs += '&signature='+sig;
+            }
+            const r=await fetch(base+path+(qs?'?'+qs:''),{
+              method,
+              headers:signed?{'X-MBX-APIKEY':key}:{}
+            });
+            let body; try{body=await r.json()}catch{body=await r.text()}
+            return {ok:r.ok,status:r.status,body};
+          }
+
+          (async()=>{
+            const t=await req('/fapi/v1/time');
+            if(!t.ok) throw new Error('time failed');
+            offset=Number(t.body.serverTime)-Date.now();
+
+            const mode=await req('/fapi/v1/positionSide/dual',{},'GET',true);
+            if(!mode.ok || mode.body.dualSidePosition!==false) throw new Error('Not ONE-WAY; refuse configure');
+
+            const mm=await req('/fapi/v1/multiAssetsMargin',{},'GET',true);
+            if(!mm.ok || mm.body.multiAssetsMargin!==false) throw new Error('Multi-Assets enabled; refuse configure');
+
+            const pos=await req('/fapi/v3/positionRisk',{symbol},'GET',true);
+            const parr=pos.ok?(Array.isArray(pos.body)?pos.body:[pos.body]):[];
+            if(parr.some(x=>Math.abs(Number(x.positionAmt||0))>0)) throw new Error('QUSDT position exists; refuse configure');
+
+            const oo=await req('/fapi/v1/openOrders',{symbol},'GET',true);
+            if(!oo.ok) throw new Error('Cannot verify Q open orders');
+            if(Array.isArray(oo.body) && oo.body.length) throw new Error('QUSDT open orders exist; refuse configure');
+
+            const margin=await req('/fapi/v1/marginType',{symbol,marginType:'ISOLATED'},'POST',true);
+            const marginCode=margin.body && typeof margin.body==='object' ? margin.body.code : null;
+            if(!margin.ok && marginCode!==-4046) throw new Error('marginType failed: '+JSON.stringify(margin.body));
+
+            const lev=await req('/fapi/v1/leverage',{symbol,leverage:2},'POST',true);
+            if(!lev.ok) throw new Error('leverage failed: '+JSON.stringify(lev.body));
+
+            const cfg=await req('/fapi/v1/symbolConfig',{symbol},'GET',true);
+            if(!cfg.ok) throw new Error('symbolConfig verify failed: '+JSON.stringify(cfg.body));
+            const arr=Array.isArray(cfg.body)?cfg.body:[cfg.body];
+            const q=arr.find(x=>x.symbol===symbol)||arr[0]||{};
+
+            const report={
+              environment:'BINANCE_USDM_TESTNET',
+              symbol,
+              changed:{
+                marginType:'ISOLATED',
+                leverage:2
+              },
+              verified:{
+                positionMode:'ONE_WAY',
+                multiAssets:false,
+                qPositionAmt:parr[0]?.positionAmt ?? '0',
+                qOpenOrders:0,
+                marginType:q.marginType ?? null,
+                leverage:q.leverage!=null?Number(q.leverage):null
+              },
+              pass:String(q.marginType||'').toUpperCase()==='ISOLATED' && Number(q.leverage)===2
+            };
+            fs.writeFileSync('demo-q-configure.json',JSON.stringify(report,null,2)+'\n');
+            console.log(JSON.stringify(report,null,2));
+            if(!report.pass) process.exitCode=3;
+          })().catch(e=>{console.error('CONFIG_ERROR',e.stack||String(e));process.exit(2)});
+          NODE
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-q-configure-report
+          path: demo-q-configure.json
+          if-no-files-found: warn
+          retention-days: 14
