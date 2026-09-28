@@ -76,7 +76,7 @@ jobs:
             const marginCode=margin.body && typeof margin.body==='object' ? margin.body.code : null;
             if(!margin.ok && marginCode!==-4046) throw new Error('marginType failed: '+JSON.stringify(margin.body));
 
-            const lev=await req('/fapi/v1/leverage',{symbol,leverage:2},'POST',true);
+            const lev=await req('/fapi/v1/leverage',{symbol,leverage:1},'POST',true);
             if(!lev.ok) throw new Error('leverage failed: '+JSON.stringify(lev.body));
 
             const cfg=await req('/fapi/v1/symbolConfig',{symbol},'GET',true);
@@ -89,7 +89,7 @@ jobs:
               symbol,
               changed:{
                 marginType:'ISOLATED',
-                leverage:2
+                leverage:1
               },
               verified:{
                 positionMode:'ONE_WAY',
@@ -99,7 +99,7 @@ jobs:
                 marginType:q.marginType ?? null,
                 leverage:q.leverage!=null?Number(q.leverage):null
               },
-              pass:String(q.marginType||'').toUpperCase()==='ISOLATED' && Number(q.leverage)===2
+              pass:String(q.marginType||'').toUpperCase()==='ISOLATED' && Number(q.leverage)===1
             };
             fs.writeFileSync('demo-q-configure.json',JSON.stringify(report,null,2)+'\n');
             console.log(JSON.stringify(report,null,2));
