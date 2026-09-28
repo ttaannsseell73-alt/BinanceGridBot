@@ -1,0 +1,219 @@
+name: Demo Gate15 Account Contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/demo-gate15.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  gate15:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+      BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+      BINANCE_FUTURES_URL: https://testnet.binancefuture.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify demo secrets present
+        shell: bash
+        run: |
+          test -n "$BINANCE_API_KEY"
+          test -n "$BINANCE_API_SECRET"
+
+      - name: Run read-only Gate 15
+        shell: bash
+        run: |
+          node <<'NODE'
+          const crypto = require('crypto');
+          const fs = require('fs');
+
+          const base = process.env.BINANCE_FUTURES_URL;
+          const key = process.env.BINANCE_API_KEY;
+          const secret = process.env.BINANCE_API_SECRET;
+          const symbol = 'QUSDT';
+
+          async function jsonFetch(url, opts={}) {
+            const res = await fetch(url, opts);
+            let body;
+            try { body = await res.json(); } catch { body = await res.text(); }
+            return {ok:res.ok,status:res.status,body,headers:Object.fromEntries(res.headers.entries())};
+          }
+
+          let serverOffset = 0;
+          async function publicGet(path, params={}) {
+            const q = new URLSearchParams(params).toString();
+            return jsonFetch(base + path + (q ? '?' + q : ''));
+          }
+          async function signedGet(path, params={}) {
+            const p = {...params, timestamp: Date.now() + serverOffset, recvWindow: 5000};
+            const qs = new URLSearchParams(p).toString();
+            const sig = crypto.createHmac('sha256', secret).update(qs).digest('hex');
+            return jsonFetch(base + path + '?' + qs + '&signature=' + sig, {
+              headers: {'X-MBX-APIKEY': key}
+            });
+          }
+          async function firstSigned(candidates, params={}) {
+            const attempts=[];
+            for (const path of candidates) {
+              const r = await signedGet(path, params);
+              attempts.push({path,status:r.status,body:r.body});
+              if (r.ok) return {path,...r,attempts};
+              const code = r.body && typeof r.body === 'object' ? r.body.code : null;
+              if (![404,-4046,-4047].includes(r.status) && code !== -4046 && code !== -4047) {
+                // continue anyway for compatibility fallbacks
+              }
+            }
+            return {ok:false,status:attempts.at(-1)?.status ?? 0,body:attempts.at(-1)?.body,attempts};
+          }
+
+          (async()=>{
+            const time = await publicGet('/fapi/v1/time');
+            if (!time.ok) throw new Error('server time failed: '+JSON.stringify(time.body));
+            serverOffset = Number(time.body.serverTime)-Date.now();
+
+            const exchange = await publicGet('/fapi/v1/exchangeInfo');
+            if (!exchange.ok) throw new Error('exchangeInfo failed: '+JSON.stringify(exchange.body));
+            const qInfo = Array.isArray(exchange.body.symbols)
+              ? exchange.body.symbols.find(x=>x.symbol===symbol)
+              : null;
+
+            const mode = await signedGet('/fapi/v1/positionSide/dual');
+            const accountConfig = await firstSigned(['/fapi/v1/accountConfig','/fapi/v2/account']);
+            const multiMode = await firstSigned(['/fapi/v1/multiAssetsMargin']);
+            const symbolConfig = await firstSigned(['/fapi/v1/symbolConfig'], {symbol});
+            const qPos = await firstSigned(['/fapi/v3/positionRisk','/fapi/v2/positionRisk'], {symbol});
+            const qOrders = await signedGet('/fapi/v1/openOrders',{symbol});
+            const allOrders = await signedGet('/fapi/v1/openOrders');
+            const allPos = await firstSigned(['/fapi/v3/positionRisk','/fapi/v2/positionRisk']);
+
+            const oneWay = mode.ok && mode.body && mode.body.dualSidePosition === false;
+
+            let multiAssets = null;
+            if (accountConfig.ok && accountConfig.body && 'multiAssetsMargin' in accountConfig.body) {
+              multiAssets = !!accountConfig.body.multiAssetsMargin;
+            } else if (multiMode.ok && multiMode.body && 'multiAssetsMargin' in multiMode.body) {
+              multiAssets = !!multiMode.body.multiAssetsMargin;
+            }
+
+            let cfg = null;
+            if (symbolConfig.ok) {
+              const arr = Array.isArray(symbolConfig.body) ? symbolConfig.body : [symbolConfig.body];
+              cfg = arr.find(x=>x.symbol===symbol) || arr[0] || null;
+            }
+            if (!cfg && accountConfig.ok && Array.isArray(accountConfig.body?.positions)) {
+              cfg = accountConfig.body.positions.find(x=>x.symbol===symbol) || null;
+            }
+
+            const qPositions = qPos.ok
+              ? (Array.isArray(qPos.body) ? qPos.body : [qPos.body]).filter(x=>x.symbol===symbol)
+              : [];
+            const qOpenPosition = qPositions.some(x=>Math.abs(Number(x.positionAmt||0))>0);
+
+            const foreignOpenPositions = allPos.ok
+              ? (Array.isArray(allPos.body)?allPos.body:[])
+                  .filter(x=>x.symbol!==symbol && Math.abs(Number(x.positionAmt||0))>0)
+                  .map(x=>({symbol:x.symbol,positionAmt:x.positionAmt,positionSide:x.positionSide}))
+              : [];
+
+            const foreignOpenOrders = allOrders.ok
+              ? (Array.isArray(allOrders.body)?allOrders.body:[])
+                  .filter(x=>x.symbol!==symbol)
+                  .map(x=>({symbol:x.symbol,side:x.side,type:x.type,status:x.status,positionSide:x.positionSide}))
+              : [];
+
+            const marginIsolated =
+              cfg ? (
+                String(cfg.marginType||'').toUpperCase()==='ISOLATED' ||
+                cfg.isolated === true ||
+                String(cfg.isolated||'').toLowerCase()==='true'
+              ) : null;
+
+            const leverage = cfg && cfg.leverage != null ? Number(cfg.leverage) : null;
+
+            const checks = {
+              credentials_valid: mode.ok || accountConfig.ok,
+              position_mode_one_way: oneWay,
+              multi_assets_off: multiAssets === false,
+              qusdt_exists: !!qInfo,
+              qusdt_trading: qInfo ? qInfo.status === 'TRADING' : false,
+              qusdt_isolated: marginIsolated,
+              qusdt_no_open_position: !qOpenPosition,
+              qusdt_no_open_orders: qOrders.ok ? (Array.isArray(qOrders.body) && qOrders.body.length===0) : null,
+              no_foreign_open_positions: foreignOpenPositions.length===0,
+              no_foreign_open_orders: foreignOpenOrders.length===0,
+            };
+
+            const hard = [
+              'credentials_valid','position_mode_one_way','multi_assets_off',
+              'qusdt_exists','qusdt_trading'
+            ];
+            const gate15 = hard.every(k=>checks[k]===true) &&
+              checks.qusdt_isolated===true &&
+              checks.no_foreign_open_positions===true &&
+              checks.no_foreign_open_orders===true;
+
+            const report = {
+              generatedAt:new Date().toISOString(),
+              environment:'BINANCE_USDM_TESTNET',
+              symbol,
+              gate15: gate15 ? 'PASS' : 'FAIL',
+              checks,
+              observed:{
+                leverage,
+                marginType:cfg?.marginType ?? null,
+                isolated:cfg?.isolated ?? null,
+                qOpenPositions:qPositions.map(x=>({positionAmt:x.positionAmt,positionSide:x.positionSide,leverage:x.leverage,isolated:x.isolated,marginType:x.marginType})),
+                qOpenOrderCount:qOrders.ok && Array.isArray(qOrders.body)?qOrders.body.length:null,
+                foreignOpenPositions,
+                foreignOpenOrders,
+              },
+              endpointStatus:{
+                positionMode:mode.status,
+                accountConfig:accountConfig.status,
+                multiAssets:multiMode.status,
+                symbolConfig:symbolConfig.status,
+                positionRisk:qPos.status,
+                openOrders:qOrders.status,
+              }
+            };
+
+            fs.writeFileSync('demo-gate15.json',JSON.stringify(report,null,2)+'\n');
+            console.log(JSON.stringify(report,null,2));
+            if (gate15) process.exit(0);
+            process.exitCode = 3;
+          })().catch(err=>{
+            console.error('GATE15_ERROR', err && err.stack || String(err));
+            process.exit(2);
+          });
+          NODE
+
+      - name: Publish Gate 15 summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f demo-gate15.json ]; then
+            {
+              echo "## Demo Gate 15"
+              echo
+              echo '~~~json'
+              cat demo-gate15.json
+              echo '~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Gate 15 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-gate15-report
+          path: demo-gate15.json
+          if-no-files-found: warn
+          retention-days: 14
