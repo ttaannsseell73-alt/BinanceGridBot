@@ -146,6 +146,7 @@ jobs:
               qusdt_exists: !!qInfo,
               qusdt_trading: qInfo ? qInfo.status === 'TRADING' : false,
               qusdt_isolated: marginIsolated,
+              qusdt_leverage_x1: leverage === 1,
               qusdt_no_open_position: !qOpenPosition,
               qusdt_no_open_orders: qOrders.ok ? (Array.isArray(qOrders.body) && qOrders.body.length===0) : null,
               no_foreign_open_positions: foreignOpenPositions.length===0,
@@ -154,7 +155,7 @@ jobs:
 
             const hard = [
               'credentials_valid','position_mode_one_way','multi_assets_off',
-              'qusdt_exists','qusdt_trading'
+              'qusdt_exists','qusdt_trading','qusdt_leverage_x1'
             ];
             const gate15 = hard.every(k=>checks[k]===true) &&
               checks.qusdt_isolated===true &&
